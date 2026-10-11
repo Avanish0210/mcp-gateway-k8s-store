@@ -1,0 +1,11 @@
+spring:
+  ai:
+    mcp:
+      client:
+        type: SYNC
+        stdio:
+          connections:
+            woocommerce:
+              command: node
+              args:
+                - "ABSOLUTE_PATH_TO_MCP_SERVER/dist/server.js"
