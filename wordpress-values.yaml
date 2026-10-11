@@ -1,0 +1,32 @@
+wordpressUsername: admin
+wordpressPassword: "avanish7080"
+wordpressEmail: avazansz7080@gmail.com
+wordpressBlogName: MCP Gateway Store
+
+service:
+  type: NodePort
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+mariadb:
+  enabled: true
+  auth:
+    rootPassword: "avanish7080"
+    database: ecommerce_store
+    username: admin
+    password: "avanish7080"
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
