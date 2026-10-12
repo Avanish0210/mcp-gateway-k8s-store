@@ -2,10 +2,9 @@ spring:
   ai:
     mcp:
       client:
-        type: SYNC
         stdio:
           connections:
             woocommerce:
-              command: node
+              command: ${MCP_NODE_COMMAND:node}
               args:
-                - "ABSOLUTE_PATH_TO_MCP_SERVER/dist/server.js"
+                - "${MCP_SERVER_PATH:${user.dir}/../mcp-servers/woocommerce/dist/server.js}"

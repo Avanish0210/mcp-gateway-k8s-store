@@ -127,6 +127,9 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<jvmArguments>-Xms128m -Xmx768m -XX:+UseSerialGC -XX:ActiveProcessorCount=4 -XX:ReservedCodeCacheSize=64m</jvmArguments>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

@@ -1,0 +1,11 @@
+.git
+.run
+**/.idea
+**/.vscode
+**/node_modules
+**/target
+**/dist
+**/build
+**/.env
+**/.env.*
+*.log

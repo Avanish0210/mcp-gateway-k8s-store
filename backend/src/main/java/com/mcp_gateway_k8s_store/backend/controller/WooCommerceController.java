@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/woocommerce")
@@ -19,5 +20,10 @@ public class WooCommerceController {
     @GetMapping("/tools")
     public List<String> getAvailableTools() {
         return wooCommerceMcpService.getAvailableTools();
+    }
+
+    @GetMapping("/status")
+    public Map<String, Object> getConnectionStatus() {
+        return wooCommerceMcpService.getConnectionStatus();
     }
 }

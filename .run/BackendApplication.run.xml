@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="BackendApplication" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.mcp_gateway_k8s_store.backend.BackendApplication" />
+    <module name="backend" />
+    <option name="VM_PARAMETERS" value="-Xms128m -Xmx768m -XX:+UseSerialGC -XX:ActiveProcessorCount=4 -XX:ReservedCodeCacheSize=64m" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/backend" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
