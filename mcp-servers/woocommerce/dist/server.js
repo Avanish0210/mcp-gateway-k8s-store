@@ -45,12 +45,10 @@ function registerTool(tool) {
     });
 }
 registerTool(listProductsTool);
-registerTool(getProductTool);
 registerTool(listOrdersTool);
 registerTool(getOrderTool);
 registerTool(listCustomersTool);
 registerTool(getCustomerTool);
-registerTool(listProductsTool);
 registerTool(getProductTool);
 registerTool(createProductTool);
 registerTool(updateOrderStatusTool);

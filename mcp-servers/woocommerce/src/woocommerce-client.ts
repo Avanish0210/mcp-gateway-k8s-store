@@ -1,13 +1,19 @@
-///This should handle communication with the WooCommerce REST API.
 import { config } from "./config.js";
 import { createHmac, randomBytes } from "node:crypto";
-
 
 export class WooCommerceClient {
     private readonly baseUrl: string;
 
     constructor() {
         this.baseUrl = `${config.woocommerceUrl}/wp-json/wc/v3`;
+    }
+
+    private encode(value: string): string {
+        return encodeURIComponent(value).replace(
+            /[!'()*]/g,
+            (character) =>
+                `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+        );
     }
 
     private async request<T>(
@@ -23,34 +29,16 @@ export class WooCommerceClient {
 
         headers.set("Accept", "application/json");
 
-        if (url.protocol === "https:") {
-            // HTTPS: use HTTP Basic Authentication.
-            const credentials = Buffer.from(
-                `${config.consumerKey}:${config.consumerSecret}`
-            ).toString("base64");
-
-            headers.set("Authorization", `Basic ${credentials}`);
-        } else if (url.protocol === "http:") {
-            // HTTP: use WooCommerce OAuth 1.0a authentication.
+        if (url.protocol === "http:") {
+            // OAuth 1.0a for local HTTP WooCommerce.
             const oauthParams: Record<string, string> = {
                 oauth_consumer_key: config.consumerKey,
                 oauth_nonce: randomBytes(16).toString("hex"),
                 oauth_signature_method: "HMAC-SHA1",
                 oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+                oauth_version: "1.0",
             };
 
-            // RFC 3986-compatible percent encoding.
-            const encode = (value: string): string =>
-                encodeURIComponent(value).replace(
-                    /[!'()*]/g,
-                    (character) =>
-                        `%${character
-                            .charCodeAt(0)
-                            .toString(16)
-                            .toUpperCase()}`
-                );
-
-            // Include existing endpoint query parameters in the signature.
             const signatureParams: Array<[string, string]> = [];
 
             url.searchParams.forEach((value, key) => {
@@ -61,35 +49,32 @@ export class WooCommerceClient {
                 signatureParams.push([key, value]);
             }
 
-            // Encode and sort parameters by encoded key, then encoded value.
             signatureParams.sort((a, b) => {
-                const keyA = encode(a[0]);
-                const keyB = encode(b[0]);
+                const keyComparison = this.encode(a[0]).localeCompare(
+                    this.encode(b[0])
+                );
 
-                if (keyA !== keyB) {
-                    return keyA < keyB ? -1 : 1;
+                if (keyComparison !== 0) {
+                    return keyComparison;
                 }
 
-                const valueA = encode(a[1]);
-                const valueB = encode(b[1]);
-
-                return valueA === valueB ? 0 : valueA < valueB ? -1 : 1;
+                return this.encode(a[1]).localeCompare(this.encode(b[1]));
             });
 
             const normalizedParams = signatureParams
-                .map(([key, value]) => `${encode(key)}=${encode(value)}`)
+                .map(
+                    ([key, value]) =>
+                        `${this.encode(key)}=${this.encode(value)}`
+                )
                 .join("&");
-
-            // The query string is excluded from the base URL.
-            const baseUrl = `${url.origin}${url.pathname}`;
 
             const signatureBaseString = [
                 method,
-                encode(baseUrl),
-                encode(normalizedParams),
+                this.encode(`${url.origin}${url.pathname}`),
+                this.encode(normalizedParams),
             ].join("&");
 
-            const signingKey = `${encode(config.consumerSecret)}&`;
+            const signingKey = `${this.encode(config.consumerSecret)}&`;
 
             oauthParams.oauth_signature = createHmac(
                 "sha1",
@@ -98,10 +83,16 @@ export class WooCommerceClient {
                 .update(signatureBaseString)
                 .digest("base64");
 
-            // Add OAuth parameters to the request URL.
             for (const [key, value] of Object.entries(oauthParams)) {
                 url.searchParams.set(key, value);
             }
+        } else if (url.protocol === "https:") {
+            // HTTPS: use Basic Authentication.
+            const credentials = Buffer.from(
+                `${config.consumerKey}:${config.consumerSecret}`
+            ).toString("base64");
+
+            headers.set("Authorization", `Basic ${credentials}`);
         } else {
             throw new Error(
                 `Unsupported WooCommerce URL protocol: ${url.protocol}`
@@ -117,25 +108,8 @@ export class WooCommerceClient {
         const responseText = await response.text();
 
         if (!response.ok) {
-            let errorDetails = responseText;
-
-            try {
-                const errorBody = JSON.parse(responseText) as {
-                    code?: string;
-                    message?: string;
-                };
-
-                if (errorBody.code === "woocommerce_rest_cannot_view") {
-                    errorDetails +=
-                        " Check the API key permissions and the capabilities " +
-                        "of the WordPress user associated with that key.";
-                }
-            } catch {
-                // Preserve the original response if it is not JSON.
-            }
-
             throw new Error(
-                `WooCommerce API error (${response.status}): ${errorDetails}`
+                `WooCommerce API error (${response.status}): ${responseText}`
             );
         }
 
@@ -166,26 +140,25 @@ export class WooCommerceClient {
     async getProduct(productId: number) {
         return this.request(`products/${productId}`);
     }
+
     async createProduct(input: {
         name: string;
         regularPrice: string;
         description?: string;
         type?: "simple" | "virtual" | "downloadable";
     }) {
-        const body = {
-            name: input.name,
-            regular_price: input.regularPrice,
-            description: input.description ?? "",
-            type: input.type ?? "simple",
-            status: "publish",
-        };
-
         return this.request("products", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+                name: input.name,
+                regular_price: input.regularPrice,
+                description: input.description ?? "",
+                type: input.type ?? "simple",
+                status: "publish",
+            }),
         });
     }
 
@@ -212,7 +185,14 @@ export class WooCommerceClient {
 
     async updateOrderStatus(
         orderId: number,
-        status: "pending" | "processing" | "on-hold" | "completed" | "cancelled" | "refunded" | "failed"
+        status:
+            | "pending"
+            | "processing"
+            | "on-hold"
+            | "completed"
+            | "cancelled"
+            | "refunded"
+            | "failed"
     ) {
         return this.request(`orders/${orderId}`, {
             method: "PUT",
