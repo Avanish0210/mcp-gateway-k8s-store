@@ -8,3 +8,21 @@ spring:
               command: ${MCP_NODE_COMMAND:node}
               args:
                 - "${MCP_SERVER_PATH:${user.dir}/../mcp-servers/woocommerce/dist/server.js}"
+
+            github:
+              command: docker
+              args:
+                - run
+                - -i
+                - --rm
+                - -e
+                - GITHUB_PERSONAL_ACCESS_TOKEN
+                - -e
+                - GITHUB_READ_ONLY
+                - -e
+                - GITHUB_TOOLSETS
+                - ghcr.io/github/github-mcp-server
+              env:
+                GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN}
+                GITHUB_READ_ONLY: "1"
+                GITHUB_TOOLSETS: "repos,issues,pull_requests,users"
