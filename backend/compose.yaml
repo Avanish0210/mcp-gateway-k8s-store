@@ -12,6 +12,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-avanish7080}
       SPRING_AI_MCP_CLIENT_ENABLED: ${SPRING_AI_MCP_CLIENT_ENABLED:-true}
+      GITHUB_MCP_URL: http://github-mcp:8082
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN:?Set GITHUB_PERSONAL_ACCESS_TOKEN in your environment or .env file}
       WOOCOMMERCE_URL: ${WOOCOMMERCE_URL:-http://host.docker.internal:8080}
       DASHBOARD_ALLOWED_ORIGIN: ${DASHBOARD_ALLOWED_ORIGIN:-http://localhost:5173}
     extra_hosts:
@@ -19,12 +21,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      github-mcp:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 30s
+
+  github-mcp:
+    image: ghcr.io/github/github-mcp-server:latest
+    command: ["http"]
+    environment:
+      GITHUB_READ_ONLY: "1"
 
   db:
     image: postgres:16-alpine

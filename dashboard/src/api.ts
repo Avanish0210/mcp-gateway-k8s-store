@@ -12,6 +12,8 @@ export type Product = { id: number; name: string; price: string; status: string;
 export type Order = { id: number; number: string; status: string; total: string; currency: string; date_created: string }
 export type Customer = { id: number; first_name: string; last_name: string; email: string; username: string }
 export type BackendStatus = { configuredClients: number; initializedClients: number; available: boolean }
+export type GitHubStatus = { service?: string; configuredClients: number; githubConnected: boolean; availableTools: number }
+export type GitHubTool = string
 
 function config(credentials: Credentials) {
   return { auth: credentials }
@@ -44,13 +46,28 @@ export const commerceApi = {
     (await api.get<Customer>(`/api/woocommerce/customers/${id}`, config(credentials))).data,
 }
 
+export const githubApi = {
+  status: async (credentials: Credentials) =>
+    (await api.get<GitHubStatus>('/api/github/status', config(credentials))).data,
+  tools: async (credentials: Credentials) =>
+    (await api.get<GitHubTool[]>('/api/github/tools', config(credentials))).data,
+  repositories: async (credentials: Credentials, query: string) =>
+    (await api.get<unknown>('/api/github/repositories', { ...config(credentials), params: { query } })).data,
+  code: async (credentials: Credentials, query: string) =>
+    (await api.get<unknown>('/api/github/code', { ...config(credentials), params: { query } })).data,
+  issues: async (credentials: Credentials, owner: string, repo: string, state: string) =>
+    (await api.get<unknown>(`/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
+      ...config(credentials), params: { state },
+    })).data,
+}
+
 export function errorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     if (error.response?.status === 401) return 'Spring Boot rejected these credentials. Use its HTTP Basic login, not the WooCommerce consumer key and secret. Local default: username “user” and the generated password printed when the backend starts; deployed credentials come from SPRING_SECURITY_USER_NAME and SPRING_SECURITY_USER_PASSWORD.'
     if (error.response?.status === 403) return 'The backend authenticated this account but denied access to this action.'
     if (error.response?.status === 502) {
       const detail = error.response?.data?.detail
-      return detail ? `WooCommerce MCP request failed: ${String(detail)}` : 'The backend could not complete the request through the WooCommerce MCP server.'
+      return detail ? `MCP request failed: ${String(detail)}` : 'The backend could not complete the request through the MCP server.'
     }
     const detail = error.response?.data?.detail
     if (detail) return String(detail)

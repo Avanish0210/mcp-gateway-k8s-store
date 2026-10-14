@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { commerceApi, errorMessage } from './api'
-import type { Credentials, Customer, Order, Product } from './api'
+import { commerceApi, errorMessage, githubApi } from './api'
+import type { Credentials, Customer, GitHubStatus, GitHubTool, Order, Product } from './api'
+import GitHubPanel from './GitHubPanel'
 import './App.css'
 
 type Section = 'products' | 'orders' | 'customers'
+type Dashboard = 'woocommerce' | 'github'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
@@ -23,6 +25,10 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [notice, setNotice] = useState('')
+  const [dashboard, setDashboard] = useState<Dashboard>('woocommerce')
+  const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null)
+  const [githubTools, setGithubTools] = useState<GitHubTool[]>([])
+  const [githubRefreshing, setGithubRefreshing] = useState(false)
 
   useEffect(() => {
     if (!connected) return
@@ -45,6 +51,18 @@ function App() {
 
   async function connect(event: FormEvent) {
     event.preventDefault()
+    if (dashboard === 'github') {
+      setConnecting(true)
+      setError('')
+      try {
+        const [status, tools] = await Promise.all([githubApi.status(credentials), githubApi.tools(credentials)])
+        setGithubStatus(status)
+        setGithubTools(tools)
+        if (!status.githubConnected) throw new Error('Spring Boot is reachable, but the GitHub MCP server is not connected. Check that its Docker container is running and GitHub authentication is configured on the backend.')
+      } catch (reason) { setError(errorMessage(reason)) }
+      finally { setConnecting(false) }
+      return
+    }
     setPage(1)
     setConnecting(true)
     setError('')
@@ -62,6 +80,17 @@ function App() {
       setConnected(false)
       setError(errorMessage(reason))
     } finally { setConnecting(false) }
+  }
+
+  async function refreshGitHub() {
+    setError('')
+    setGithubRefreshing(true)
+    try {
+      const [status, tools] = await Promise.all([githubApi.status(credentials), githubApi.tools(credentials)])
+      setGithubStatus(status)
+      setGithubTools(tools)
+    } catch (reason) { setError(errorMessage(reason)) }
+    finally { setGithubRefreshing(false) }
   }
 
   async function openDetail(id: number) {
@@ -115,11 +144,26 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>WooCommerce</h1></div>
-        <div className="connection"><span className={connected ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : connected ? `Store connected · ${backendStatus?.initializedClients ?? 0} MCP server${backendStatus?.initializedClients === 1 ? '' : 's'}` : 'Not connected'}</div>
+        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : 'WooCommerce'}</h1></div>
+        <div className="connection"><span className={(dashboard === 'github' ? githubStatus?.githubConnected : connected) ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : dashboard === 'github' ? githubStatus?.githubConnected ? `GitHub connected · ${githubStatus.availableTools} tools` : 'GitHub not connected' : connected ? `Store connected · ${backendStatus?.initializedClients ?? 0} MCP server${backendStatus?.initializedClients === 1 ? '' : 's'}` : 'Not connected'}</div>
       </header>
 
-      {!connected ? <form className="connect-card" onSubmit={connect}>
+      <nav className="tabs dashboard-tabs" aria-label="MCP integrations">
+        <button className={dashboard === 'woocommerce' ? 'tab active' : 'tab'} onClick={() => { setDashboard('woocommerce'); setError('') }}>WooCommerce</button>
+        <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
+      </nav>
+
+      {dashboard === 'github' ? <>
+        {!githubStatus?.githubConnected && <form className="connect-card" onSubmit={connect}>
+          <h2>Connect to GitHub MCP</h2>
+          <p>Use the Spring Boot HTTP Basic credentials. GitHub credentials stay on the backend and are never entered here.</p>
+          <div className="credentials"><label>Username<input autoComplete="username" required value={credentials.username} onChange={(event) => setCredentials({ ...credentials, username: event.target.value })} /></label><label>Password<input type="password" autoComplete="current-password" required value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label></div>
+          <button className="primary" type="submit" disabled={connecting}>{connecting ? 'Checking…' : 'Connect to GitHub'}</button>
+          {error && <div className="error" role="alert">{error}</div>}
+        </form>}
+        {githubStatus?.githubConnected && <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} />}
+        {error && githubStatus?.githubConnected && <div className="error github-global-error" role="alert">{error}</div>}
+      </> : !connected ? <form className="connect-card" onSubmit={connect}>
         <h2>Connect to your backend</h2>
         <p>Connect using the Spring Boot HTTP Basic credentials. WooCommerce OAuth keys stay on the MCP server and are never entered here.</p>
         <div className="credentials">
@@ -132,7 +176,7 @@ function App() {
       </form> : <>
         <nav className="tabs" aria-label="Store resources">
           {(['products', 'orders', 'customers'] as Section[]).map((item) => <button key={item} className={section === item ? 'tab active' : 'tab'} onClick={() => { setSection(item); setPage(1); setDetail(null); setNotice('') }}>{item}</button>)}
-          <button className="disconnect" onClick={() => { setConnected(false); setCredentials({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setError('') }}>Disconnect</button>
+          <button className="disconnect" onClick={() => { setConnected(false); setCredentials({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setGithubStatus(null); setGithubTools([]); setError('') }}>Disconnect</button>
         </nav>
 
         <section className="workspace">
