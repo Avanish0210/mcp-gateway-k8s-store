@@ -14,6 +14,13 @@ export type Customer = { id: number; first_name: string; last_name: string; emai
 export type BackendStatus = { configuredClients: number; initializedClients: number; available: boolean }
 export type GitHubStatus = { service?: string; configuredClients: number; githubConnected: boolean; availableTools: number }
 export type GitHubTool = string
+export type WeatherStatus = { configuredClients: number; initializedClients: number; available: boolean; tools: string[] }
+export type WeatherTool = string
+export type WeatherLocation = { name: string; country?: string; admin1?: string; latitude: number; longitude: number; timezone?: string }
+export type WeatherCurrent = { time?: string; temperatureC?: number; feelsLikeC?: number; humidityPercent?: number; windSpeedKmh?: number; precipitationMm?: number; isDay?: boolean; weatherCode?: number; conditions?: string }
+export type CurrentWeatherResponse = { location?: WeatherLocation; current?: WeatherCurrent; units?: Record<string, string> }
+export type DailyForecast = { date: string; conditions?: string; weatherCode?: number; maxTemperatureC?: number; minTemperatureC?: number; precipitationProbabilityPercent?: number; maxWindSpeedKmh?: number }
+export type ForecastResponse = { location?: WeatherLocation; forecast?: DailyForecast[]; units?: Record<string, string> }
 
 function config(credentials: Credentials) {
   return { auth: credentials }
@@ -59,6 +66,19 @@ export const githubApi = {
     (await api.get<unknown>(`/api/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, {
       ...config(credentials), params: { state },
     })).data,
+}
+
+export const weatherApi = {
+  status: async (credentials: Credentials) =>
+    (await api.get<WeatherStatus>('/api/weather/status', config(credentials))).data,
+  tools: async (credentials: Credentials) =>
+    (await api.get<WeatherTool[]>('/api/weather/tools', config(credentials))).data,
+  locations: async (credentials: Credentials, location: string) =>
+    (await api.get<{ locations: WeatherLocation[] }>('/api/weather/location', { ...config(credentials), params: { location } })).data,
+  current: async (credentials: Credentials, location: string) =>
+    (await api.get<CurrentWeatherResponse>('/api/weather/current', { ...config(credentials), params: { location } })).data,
+  forecast: async (credentials: Credentials, location: string, days: number) =>
+    (await api.get<ForecastResponse>('/api/weather/forecast', { ...config(credentials), params: { location, days } })).data,
 }
 
 export function errorMessage(error: unknown) {

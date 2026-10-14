@@ -3,10 +3,11 @@ import type { FormEvent } from 'react'
 import { commerceApi, errorMessage, githubApi } from './api'
 import type { Credentials, Customer, GitHubStatus, GitHubTool, Order, Product } from './api'
 import GitHubPanel from './GitHubPanel'
+import WeatherPanel from './WeatherPanel'
 import './App.css'
 
 type Section = 'products' | 'orders' | 'customers'
-type Dashboard = 'woocommerce' | 'github'
+type Dashboard = 'woocommerce' | 'github' | 'weather'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
@@ -144,16 +145,17 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : 'WooCommerce'}</h1></div>
-        <div className="connection"><span className={(dashboard === 'github' ? githubStatus?.githubConnected : connected) ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : dashboard === 'github' ? githubStatus?.githubConnected ? `GitHub connected · ${githubStatus.availableTools} tools` : 'GitHub not connected' : connected ? `Store connected · ${backendStatus?.initializedClients ?? 0} MCP server${backendStatus?.initializedClients === 1 ? '' : 's'}` : 'Not connected'}</div>
+        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : dashboard === 'weather' ? 'Weather MCP' : 'WooCommerce'}</h1></div>
+        <div className="connection"><span className={(dashboard === 'github' ? githubStatus?.githubConnected : dashboard === 'weather' ? false : connected) ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : dashboard === 'github' ? githubStatus?.githubConnected ? `GitHub connected · ${githubStatus.availableTools} tools` : 'GitHub not connected' : dashboard === 'weather' ? 'Weather status shown below' : connected ? `Store connected · ${backendStatus?.initializedClients ?? 0} MCP server${backendStatus?.initializedClients === 1 ? '' : 's'}` : 'Not connected'}</div>
       </header>
 
       <nav className="tabs dashboard-tabs" aria-label="MCP integrations">
         <button className={dashboard === 'woocommerce' ? 'tab active' : 'tab'} onClick={() => { setDashboard('woocommerce'); setError('') }}>WooCommerce</button>
         <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
+        <button className={dashboard === 'weather' ? 'tab active' : 'tab'} onClick={() => { setDashboard('weather'); setError('') }}>Weather MCP</button>
       </nav>
 
-      {dashboard === 'github' ? <>
+      {dashboard === 'weather' ? <WeatherPanel /> : dashboard === 'github' ? <>
         {!githubStatus?.githubConnected && <form className="connect-card" onSubmit={connect}>
           <h2>Connect to GitHub MCP</h2>
           <p>Use the Spring Boot HTTP Basic credentials. GitHub credentials stay on the backend and are never entered here.</p>
