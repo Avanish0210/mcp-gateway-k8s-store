@@ -8,6 +8,10 @@ spring:
               command: ${MCP_NODE_COMMAND:node}
               args:
                 - "${MCP_SERVER_PATH:${user.dir}/../mcp-servers/woocommerce/dist/server.js}"
+            weather:
+              command: ${MCP_NODE_COMMAND:node}
+              args:
+                - "${WEATHER_MCP_SERVER_PATH:${user.dir}/../mcp-servers/weather/dist/server.js}"
 
         streamable-http:
           connections:

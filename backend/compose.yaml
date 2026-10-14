@@ -13,7 +13,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-avanish7080}
       SPRING_AI_MCP_CLIENT_ENABLED: ${SPRING_AI_MCP_CLIENT_ENABLED:-true}
       GITHUB_MCP_URL: http://github-mcp:8082
-      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN:?Set GITHUB_PERSONAL_ACCESS_TOKEN in your environment or .env file}
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN:?Set GITHUB_PERSONAL_ACCESS_TOKEN in the root .env file or your environment}
       WOOCOMMERCE_URL: ${WOOCOMMERCE_URL:-http://host.docker.internal:8080}
       DASHBOARD_ALLOWED_ORIGIN: ${DASHBOARD_ALLOWED_ORIGIN:-http://localhost:5173}
     extra_hosts:
@@ -33,6 +33,8 @@ services:
   github-mcp:
     image: ghcr.io/github/github-mcp-server:latest
     command: ["http"]
+    ports:
+      - "127.0.0.1:8082:8082"
     environment:
       GITHUB_READ_ONLY: "1"
 
