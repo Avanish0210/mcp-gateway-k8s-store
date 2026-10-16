@@ -1,4 +1,23 @@
 .app-shell { width: min(1240px, calc(100% - 56px)); margin: 0 auto; padding: 38px 0 64px; }
+.auth-shell { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; padding-top: 30px; background: radial-gradient(ellipse at 50% 42%, #eaf1ff 0, #f4f6fa 54%); }
+.auth-brand { display: flex; align-items: center; gap: 11px; color: #1c2b43; }
+.auth-brand > div { display: grid; gap: 2px; }
+.auth-brand strong { font-size: 14px; font-weight: 680; }
+.brand-mark { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; background: #315fc0; color: white; font-size: 17px; font-weight: 750; box-shadow: 0 3px 8px #315fc033; }
+.auth-card { align-self: center; width: 100%; max-width: 430px; margin: 0 auto 70px; padding: 32px; border-top: 3px solid #5279c5; }
+.auth-card h1 { margin: 8px 0; color: #1c2b43; font-size: 25px; letter-spacing: -.035em; }
+.auth-card p { margin-bottom: 23px; }
+.auth-fields { grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
+.auth-fields input { padding: 11px 12px; }
+.auth-submit { width: 100%; padding: 11px 15px; }
+.auth-footnote { display: block; margin-top: 18px; color: #8792a3; font-size: 11px; text-align: center; }
+.user-badge { display: flex; align-items: center; gap: 9px; }
+.user-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #244b9a; background: #e6edfb; font-size: 13px; font-weight: 700; }
+.user-badge > span:nth-child(2) { display: grid; gap: 2px; }
+.user-badge strong { color: #34445d; font-size: 12px; }
+.user-badge small { color: #8792a3; font-size: 10px; letter-spacing: .06em; }
+.integration-unavailable { margin-top: 20px; }
+.integration-unavailable p { color: #748197; font-size: 13px; }
 .topbar, .panel-heading, .connection, .tabs, .record, .pagination, .form-row { display: flex; align-items: center; }
 .topbar { justify-content: space-between; padding: 0 0 25px; border-bottom: 1px solid #e5e9f0; }
 .topbar h1 { margin: 5px 0 0; color: #16243b; font-size: clamp(27px, 3vw, 35px); line-height: 1.15; letter-spacing: -.045em; font-weight: 680; }
@@ -149,7 +168,7 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: #7597dc; b
 .weather-tool-list article { min-width: 0; padding: 13px; background: #f8faff; border: 1px solid #e8edf5; border-radius: 8px; }
 .weather-tool-list code { color: #3159a8; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
 .weather-tool-list p { margin: 7px 0 0; color: #7e8a9d; font-size: 10px; line-height: 1.5; }
-@media (max-width: 760px) { .app-shell { width: min(100% - 28px, 560px); padding-top: 23px; } .workspace { grid-template-columns: 1fr; } .list-panel, .detail-panel { padding: 18px; } .credentials { grid-template-columns: 1fr; } .topbar { align-items: flex-start; gap: 18px; flex-direction: column; } .connect-card { margin: 42px auto; padding: 22px; } }
+@media (max-width: 760px) { .app-shell { width: min(100% - 28px, 560px); padding-top: 23px; } .auth-shell { min-height: 100vh; padding-top: 20px; } .auth-card { margin: 0 auto 48px; padding: 24px 21px; } .workspace { grid-template-columns: 1fr; } .list-panel, .detail-panel { padding: 18px; } .credentials { grid-template-columns: 1fr; } .topbar { align-items: flex-start; gap: 18px; flex-direction: column; } .connect-card { margin: 42px auto; padding: 22px; } .user-badge { width: 100%; } .user-badge .disconnect { margin-left: auto; } }
 @media (max-width: 560px) { .github-status { grid-template-columns: 1fr; padding: 18px; } .github-status-actions { justify-content: space-between; } .github-search { align-items: stretch; flex-direction: column; } .github-search > button { align-self: flex-start; } .github-metrics { gap: 24px; } }
 @media (max-width: 760px) { .weather-current-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .forecast-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .weather-tool-list { grid-template-columns: 1fr; } .weather-heading, .weather-location-banner { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 560px) { .weather-search > div { align-items: stretch; flex-direction: column; } .weather-search > div button { align-self: flex-start; } .weather-heading-actions { width: 100%; justify-content: space-between; } .weather-current-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .weather-primary-card { grid-column: span 2; } .weather-current-card, .weather-metric-card { padding: 14px; } .forecast-grid { grid-template-columns: 1fr 1fr; } .forecast-panel .panel-heading { align-items: flex-start; flex-direction: column; } .forecast-card small { white-space: normal; } }

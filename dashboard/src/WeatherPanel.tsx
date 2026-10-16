@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Cloud, CloudSun, Droplets, MapPin, RefreshCw, Search, Wind } from 'lucide-react'
 import { errorMessage, weatherApi } from './api'
@@ -25,9 +25,7 @@ function locationResults(value: unknown): WeatherLocation[] {
   return []
 }
 
-export default function WeatherPanel() {
-  const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' })
-  const [authenticated, setAuthenticated] = useState(false)
+export default function WeatherPanel({ credentials }: { credentials: Credentials }) {
   const [connecting, setConnecting] = useState(false)
   const [status, setStatus] = useState<WeatherStatus | null>(null)
   const [tools, setTools] = useState<WeatherTool[]>([])
@@ -44,22 +42,24 @@ export default function WeatherPanel() {
   const requestId = useRef(0)
   const searchId = useRef(0)
 
-  async function checkConnection(event?: FormEvent) {
-    event?.preventDefault()
+  const checkConnection = useCallback(async () => {
     setConnecting(true)
     setStatusError('')
     try {
       const [nextStatus, nextTools] = await Promise.all([weatherApi.status(credentials), weatherApi.tools(credentials)])
       setStatus(nextStatus)
       setTools(nextTools)
-      setAuthenticated(true)
       if (!nextStatus.available) setStatusError('The backend is reachable, but the Weather MCP client is not initialized. Check the backend MCP server configuration and retry.')
     } catch (reason) {
-      setAuthenticated(false)
       setStatus(null)
       setStatusError(errorMessage(reason))
     } finally { setConnecting(false) }
-  }
+  }, [credentials])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void checkConnection() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [checkConnection])
 
   async function searchLocation(event: FormEvent) {
     event.preventDefault()
@@ -118,13 +118,6 @@ export default function WeatherPanel() {
   }
 
   return <>
-    {!authenticated ? <form className="connect-card" onSubmit={checkConnection}>
-      <span className="eyebrow">WEATHER MCP · GATEWAY CONNECTION</span><h2>Connect to the Weather MCP gateway</h2>
-      <p>Sign in with your Spring Boot HTTP Basic credentials. Weather requests are sent through the backend MCP gateway.</p>
-      <div className="credentials"><label>Username<input autoComplete="username" required value={credentials.username} onChange={(event) => setCredentials({ ...credentials, username: event.target.value })} /></label><label>Password<input type="password" autoComplete="current-password" required value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label></div>
-      <button className="primary" type="submit" disabled={connecting}>{connecting ? 'Checking connection…' : 'Connect to Weather MCP'}</button>
-      {statusError && <div className="error" role="alert">{statusError}</div>}
-    </form> : <>
       <section className="weather-heading">
         <div><span className="eyebrow">MCP GATEWAY · OPEN-METEO</span><h2>Weather MCP</h2><p>Live conditions and daily forecasts retrieved through the Weather MCP gateway.</p></div>
         <div className="weather-heading-actions"><span className="connection"><span className={status?.available ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : status?.available ? 'Connected' : 'Unavailable'}</span><button className="secondary" onClick={() => void refresh()} disabled={connecting || weatherLoading}><RefreshCw size={14} /> {weatherLoading ? 'Refreshing…' : 'Refresh'}</button></div>
@@ -151,7 +144,6 @@ export default function WeatherPanel() {
         </section>
       </>}
       <section className="list-panel weather-tools-panel"><div className="panel-heading"><div><span className="eyebrow">GATEWAY CAPABILITIES</span><h2>Weather MCP tools</h2></div><span className="tool-count">{tools.length} reported</span></div>{tools.length ? <div className="weather-tool-list">{tools.map((tool) => <article key={tool}><code>{tool}</code><p>{descriptions[tool] || 'Tool reported by the Weather MCP gateway.'}</p></article>)}</div> : <p className="muted">The backend reports no Weather MCP tools.</p>}</section>
-    </>}
   </>
 }
 

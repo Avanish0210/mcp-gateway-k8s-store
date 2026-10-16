@@ -6,7 +6,10 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-export type Credentials = { username: string; password: string }
+export type UserRole = 'ADMIN' | 'MEMBER'
+export type UserProfile = { id: string; username: string; role: UserRole; enabled: boolean }
+export type LoginResponse = { accessToken: string; tokenType: 'Bearer'; expiresIn: number; user: UserProfile }
+export type Credentials = { accessToken: string; username: string; role: UserRole }
 export type ManagedStore = { id: string; name: string; namespace: string; helmRelease: string; storeUrl: string | null; status: 'PROVISIONING' | 'READY' | 'FAILED' | 'DELETING'; errorMessage: string | null; createdAt: string | null }
 export type Page<T> = { items: T[]; hasMore: boolean }
 export type Product = { id: number; name: string; price: string; status: string; type: string }
@@ -24,11 +27,11 @@ export type DailyForecast = { date: string; conditions?: string; weatherCode?: n
 export type ForecastResponse = { location?: WeatherLocation; forecast?: DailyForecast[]; units?: Record<string, string> }
 
 function config(credentials: Credentials, storeId?: string) {
-  return { auth: credentials, ...(storeId ? { params: { storeId } } : {}) }
+  return { headers: { Authorization: `Bearer ${credentials.accessToken}` }, ...(storeId ? { params: { storeId } } : {}) }
 }
 
 async function list<T>(path: string, credentials: Credentials, page: number, perPage: number, extra = {}, storeId?: string) {
-  const response = await api.get<T[]>(path, { auth: credentials, params: { page, perPage, ...extra, ...(storeId ? { storeId } : {}) } })
+  const response = await api.get<T[]>(path, { ...config(credentials), params: { page, perPage, ...extra, ...(storeId ? { storeId } : {}) } })
   const items = response.data
   return { items, hasMore: items.length === perPage }
 }
@@ -59,6 +62,11 @@ export const storesApi = {
   create: async (credentials: Credentials, name: string) => (await api.post<ManagedStore>('/api/stores', { name }, config(credentials))).data,
   retry: async (credentials: Credentials, id: string) => (await api.post<ManagedStore>(`/api/stores/${id}/retry`, {}, config(credentials))).data,
   remove: async (credentials: Credentials, id: string) => (await api.delete<ManagedStore>(`/api/stores/${id}`, config(credentials))).data,
+}
+
+export const authApi = {
+  login: async (username: string, password: string) => (await api.post<LoginResponse>('/api/auth/login', { username, password })).data,
+  profile: async (credentials: Credentials) => (await api.get<UserProfile>('/api/auth/me', config(credentials))).data,
 }
 
 export const storeWooApi = {
@@ -95,7 +103,7 @@ export const weatherApi = {
 
 export function errorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
-    if (error.response?.status === 401) return 'Spring Boot rejected these credentials. Use its HTTP Basic login, not the WooCommerce consumer key and secret. Local default: username “user” and the generated password printed when the backend starts; deployed credentials come from SPRING_SECURITY_USER_NAME and SPRING_SECURITY_USER_PASSWORD.'
+    if (error.response?.status === 401) return 'Your login or session is invalid or expired. Sign in again with your application username and password.'
     if (error.response?.status === 403) return 'The backend authenticated this account but denied access to this action.'
     if (error.response?.status === 502) {
       const detail = error.response?.data?.detail

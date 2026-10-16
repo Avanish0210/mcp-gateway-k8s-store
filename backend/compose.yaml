@@ -28,6 +28,12 @@ services:
       # Bitnami Legacy WordPress is currently pinned at 6.8.2 for local
       # development, so keep the WooCommerce release compatible with it.
       STORES_WOOCOMMERCE_PLUGIN_VERSION: ${STORES_WOOCOMMERCE_PLUGIN_VERSION:-10.7.0}
+      JWT_SECRET: ${JWT_SECRET:-jegfvjsdvcvsyvdyfgvsjdhvcdbfuguygsjgdvfjdsvcjhevfgdshfgdhfghfhsdvfhsvdfhsvhfveydvfsyvdfjhvsjhvfd}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-admin}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin7080}
+      INITIAL_MEMBER_USERNAME: ${INITIAL_MEMBER_USERNAME:-Member}
+      INITIAL_MEMBER_PASSWORD: ${INITIAL_MEMBER_PASSWORD:-member7080}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

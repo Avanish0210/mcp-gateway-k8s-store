@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { commerceApi, errorMessage, githubApi, storesApi } from './api'
+import { authApi, commerceApi, errorMessage, githubApi, storesApi } from './api'
 import type { Credentials, Customer, GitHubStatus, GitHubTool, ManagedStore, Order, Product } from './api'
 import GitHubPanel from './GitHubPanel'
 import WeatherPanel from './WeatherPanel'
@@ -12,7 +12,8 @@ type Dashboard = 'woocommerce' | 'github' | 'weather' | 'stores'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
-  const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' })
+  const [credentials, setCredentials] = useState<Credentials>({ accessToken: '', username: '', role: 'MEMBER' })
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [backendStatus, setBackendStatus] = useState<{ configuredClients: number; initializedClients: number; available: boolean } | null>(null)
@@ -39,7 +40,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!connected) return
+    if (!connected || !backendStatus?.available) return
     let active = true
     const timer = window.setTimeout(() => {
       setLoading(true)
@@ -57,38 +58,34 @@ function App() {
       }).finally(() => { if (active) setLoading(false) })
     }, 0)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [connected, credentials, section, page, search, statusFilter, activeStoreId])
+  }, [connected, backendStatus?.available, credentials, section, page, search, statusFilter, activeStoreId])
 
   async function connect(event: FormEvent) {
     event.preventDefault()
-    if (dashboard === 'github') {
-      setConnecting(true)
-      setError('')
-      try {
-        const [status, tools] = await Promise.all([githubApi.status(credentials), githubApi.tools(credentials)])
-        setGithubStatus(status)
-        setGithubTools(tools)
-        if (!status.githubConnected) throw new Error('Spring Boot is reachable, but the GitHub MCP server is not connected. Check that its Docker container is running and GitHub authentication is configured on the backend.')
-      } catch (reason) { setError(errorMessage(reason)) }
-      finally { setConnecting(false) }
-      return
-    }
-    setPage(1)
     setConnecting(true)
     setError('')
     try {
-      const status = await commerceApi.status(credentials)
-      setBackendStatus(status)
-      if (!status.available) {
-        throw new Error('Spring Boot is reachable, but no WooCommerce MCP server is initialized. Check that the backend can launch the MCP process and that its environment contains the WooCommerce URL and consumer credentials.')
-      }
-      const result = await commerceApi.products(credentials, 1, '')
-      setItems(result.items)
-      setHasMore(result.hasMore)
-      try { syncManagedStores(await storesApi.list(credentials)) } catch { syncManagedStores([]) }
+      const result = await authApi.login(loginForm.username, loginForm.password)
+      const session: Credentials = { accessToken: result.accessToken, username: result.user.username, role: result.user.role }
+      setLoginForm({ username: result.user.username, password: '' })
+      setCredentials(session)
+      setPage(1)
       setConnected(true)
+      setDashboard('woocommerce')
+      setError('')
+      const [woo, github] = await Promise.allSettled([
+        commerceApi.status(session),
+        Promise.all([githubApi.status(session), githubApi.tools(session)]),
+      ])
+      if (woo.status === 'fulfilled') setBackendStatus(woo.value)
+      if (github.status === 'fulfilled') {
+        setGithubStatus(github.value[0])
+        setGithubTools(github.value[1])
+      }
+      if (session.role === 'ADMIN') {
+        try { syncManagedStores(await storesApi.list(session)) } catch { syncManagedStores([]) }
+      } else syncManagedStores([])
     } catch (reason) {
-      setConnected(false)
       setError(errorMessage(reason))
     } finally { setConnecting(false) }
   }
@@ -152,57 +149,55 @@ function App() {
     key !== 'id' && value !== null && value !== undefined && typeof value !== 'object' && value !== '',
   ) : []
 
+  if (!credentials.accessToken) return <main className="app-shell auth-shell">
+    <header className="auth-brand"><span className="brand-mark">M</span><div><span className="eyebrow">MCP GATEWAY</span><strong>Store Console</strong></div></header>
+    <form className="connect-card auth-card" onSubmit={connect}>
+      <span className="eyebrow">SECURE WORKSPACE</span>
+      <h1>Sign in to your gateway</h1>
+      <p>Use your application account to open the connected MCP servers and store tools.</p>
+      <div className="credentials auth-fields">
+        <label>Username<input autoComplete="username" required autoFocus value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} /></label>
+        <label>Password<input type="password" autoComplete="current-password" required value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} /></label>
+      </div>
+      <button className="primary auth-submit" type="submit" disabled={connecting}>{connecting ? 'Signing in…' : 'Sign in'}</button>
+      {error && <div className="error" role="alert">{error}</div>}
+      <small className="auth-footnote">Your access is managed by your gateway administrator.</small>
+    </form>
+  </main>
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : dashboard === 'weather' ? 'Weather MCP' : 'WooCommerce'}</h1></div>
-        <div className="connection"><span className={(dashboard === 'github' ? githubStatus?.githubConnected : dashboard === 'weather' ? false : connected) ? 'status-dot online' : 'status-dot'} />{connecting ? 'Checking connection…' : dashboard === 'github' ? githubStatus?.githubConnected ? `GitHub connected · ${githubStatus.availableTools} tools` : 'GitHub not connected' : dashboard === 'weather' ? 'Weather status shown below' : connected ? `Store connected · ${backendStatus?.initializedClients ?? 0} MCP server${backendStatus?.initializedClients === 1 ? '' : 's'}` : 'Not connected'}</div>
+        <div className="user-badge"><span className="user-avatar">{credentials.username.slice(0, 1).toUpperCase()}</span><span><strong>{credentials.username}</strong><small>{credentials.role}</small></span><button className="disconnect" onClick={() => { setConnected(false); setCredentials({ accessToken: '', username: '', role: 'MEMBER' }); setLoginForm({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setGithubStatus(null); setGithubTools([]); syncManagedStores([]); setDashboard('woocommerce'); setError('') }}>Sign out</button></div>
       </header>
 
       <nav className="tabs dashboard-tabs" aria-label="MCP integrations">
         <button className={dashboard === 'woocommerce' ? 'tab active' : 'tab'} onClick={() => { setDashboard('woocommerce'); setError('') }}>WooCommerce</button>
         <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
         <button className={dashboard === 'weather' ? 'tab active' : 'tab'} onClick={() => { setDashboard('weather'); setError('') }}>Weather MCP</button>
-        <button className={dashboard === 'stores' ? 'tab active' : 'tab'} onClick={() => { setDashboard('stores'); setError('') }}>Stores</button>
+        {credentials.role === 'ADMIN' && <button className={dashboard === 'stores' ? 'tab active' : 'tab'} onClick={() => { setDashboard('stores'); setError('') }}>Stores</button>}
       </nav>
 
-      {dashboard === 'stores' && connected ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel /> : dashboard === 'github' ? <>
-        {!githubStatus?.githubConnected && <form className="connect-card" onSubmit={connect}>
-          <h2>Connect to GitHub MCP</h2>
-          <p>Use the Spring Boot HTTP Basic credentials. GitHub credentials stay on the backend and are never entered here.</p>
-          <div className="credentials"><label>Username<input autoComplete="username" required value={credentials.username} onChange={(event) => setCredentials({ ...credentials, username: event.target.value })} /></label><label>Password<input type="password" autoComplete="current-password" required value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label></div>
-          <button className="primary" type="submit" disabled={connecting}>{connecting ? 'Checking…' : 'Connect to GitHub'}</button>
-          {error && <div className="error" role="alert">{error}</div>}
-        </form>}
-        {githubStatus?.githubConnected && <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} />}
-        {error && githubStatus?.githubConnected && <div className="error github-global-error" role="alert">{error}</div>}
-      </> : !connected ? <form className="connect-card" onSubmit={connect}>
-        <h2>Connect to your backend</h2>
-        <p>Connect using the Spring Boot HTTP Basic credentials. WooCommerce OAuth keys stay on the MCP server and are never entered here.</p>
-        <div className="credentials">
-          <label>Username<input autoComplete="username" required value={credentials.username} onChange={(event) => setCredentials({ ...credentials, username: event.target.value })} /></label>
-          <label>Password<input type="password" autoComplete="current-password" required value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
-        </div>
-        <button className="primary" type="submit" disabled={connecting}>{connecting ? 'Checking…' : 'Connect to store'}</button>
-        {backendStatus && !backendStatus.available && <div className="connection-diagnostic" role="status"><strong>Backend is reachable; WooCommerce is not connected.</strong><span>{backendStatus.configuredClients} MCP client configured · {backendStatus.initializedClients} initialized</span></div>}
-        {error && <div className="error" role="alert">{error}</div>}
-      </form> : <>
+      {dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
+        {githubStatus?.githubConnected ? <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} /> : <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>GitHub</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>Sign-in succeeded. The GitHub MCP server is currently unavailable.</p><button className="secondary" onClick={() => void refreshGitHub()} disabled={githubRefreshing}>{githubRefreshing ? 'Checking…' : 'Check connection'}</button></section>}
+        {error && <div className="error github-global-error" role="alert">{error}</div>}
+      </> : dashboard === 'woocommerce' && !backendStatus?.available ? <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>WooCommerce</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>You are signed in, but the WooCommerce MCP server is unavailable. Check its backend configuration and try again.</p><button className="secondary" onClick={() => void commerceApi.status(credentials).then(setBackendStatus).catch((reason: unknown) => setError(errorMessage(reason)))}>Check connection</button></section> : dashboard === 'woocommerce' ? <>
         <nav className="tabs" aria-label="Store resources">
           {(['products', 'orders', 'customers'] as Section[]).map((item) => <button key={item} className={section === item ? 'tab active' : 'tab'} onClick={() => { setSection(item); setPage(1); setDetail(null); setNotice('') }}>{item}</button>)}
           <label className="store-picker">Store<select value={activeStoreId} onChange={(event) => { setActiveStoreId(event.target.value); setPage(1); setDetail(null) }}><option value="">Store 1 · ecommerce</option>{managedStores.filter((store) => store.namespace !== 'ecommerce' && store.status === 'READY').map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
-          <button className="disconnect" onClick={() => { setConnected(false); setCredentials({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setGithubStatus(null); setGithubTools([]); setError('') }}>Disconnect</button>
         </nav>
 
         <section className="workspace">
           <div className="list-panel">
             <div className="panel-heading"><div><span className="eyebrow">STORE CATALOG</span><h2>{sectionLabel}</h2></div>
-              {section === 'products' && <button className="primary" onClick={() => { setShowCreate((value) => !value); setError('') }}>{showCreate ? 'Close' : 'New product'}</button>}
+              {section === 'products' && credentials.role === 'ADMIN' && <button className="primary" onClick={() => { setShowCreate((value) => !value); setError('') }}>{showCreate ? 'Close' : 'New product'}</button>}
             </div>
 
             {section === 'products' && <label className="filter">Search products<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Name or keyword" /></label>}
             {section === 'orders' && <label className="filter">Order status<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }}><option value="">All statuses</option>{orderStatuses.map((value) => <option key={value}>{value}</option>)}</select></label>}
 
-            {showCreate && <form className="create-form" onSubmit={createProduct}>
+            {showCreate && credentials.role === 'ADMIN' && <form className="create-form" onSubmit={createProduct}>
               <h3>Create product</h3>
               <label>Name<input name="name" required maxLength={200} /></label>
               <div className="form-row"><label>Price<input name="regularPrice" inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" required placeholder="0.00" /></label><label>Type<select name="type"><option value="simple">Simple</option><option value="virtual">Virtual</option><option value="downloadable">Downloadable</option></select></label></div>
@@ -228,12 +223,12 @@ function App() {
           <aside className="detail-panel">
             <span className="eyebrow">DETAILS</span>
             {detail ? <><h2>{section === 'products' ? (detail as Product).name : section === 'orders' ? `Order #${(detail as Order).number || detail.id}` : `${(detail as Customer).first_name} ${(detail as Customer).last_name}`}</h2>
-              {section === 'orders' && <div className="status-editor"><label>Status<select value={(detail as Order).status} onChange={(event) => changeOrderStatus(detail as Order, event.target.value)}>{orderStatuses.map((value) => <option key={value}>{value}</option>)}</select></label></div>}
+              {section === 'orders' && credentials.role === 'ADMIN' && <div className="status-editor"><label>Status<select value={(detail as Order).status} onChange={(event) => changeOrderStatus(detail as Order, event.target.value)}>{orderStatuses.map((value) => <option key={value}>{value}</option>)}</select></label></div>}
               <dl className="detail-fields">{detailFields.map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{String(value)}</dd></div>)}</dl>
             </> : <p className="muted">Select a {section.slice(0, -1)} to view its details.</p>}
           </aside>
         </section>
-      </>}
+      </> : null}
       {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
     </main>
   )
