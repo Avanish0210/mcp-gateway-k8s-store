@@ -22,12 +22,13 @@ public class CustomerController {
 
     @GetMapping
     public Object list(@RequestParam(defaultValue = "1") @Min(1) int page,
-                       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int perPage) {
-        return service.listCustomers(page, perPage);
+                       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int perPage,
+                       @RequestParam(required = false) String storeId) {
+        return storeId == null ? service.listCustomers(page, perPage) : service.listCustomers(storeId, page, perPage);
     }
 
     @GetMapping("/{customerId}")
-    public Object get(@PathVariable @Min(1) long customerId) {
-        return service.getCustomer(customerId);
+    public Object get(@PathVariable @Min(1) long customerId, @RequestParam(required = false) String storeId) {
+        return storeId == null ? service.getCustomer(customerId) : service.getCustomer(storeId, customerId);
     }
 }

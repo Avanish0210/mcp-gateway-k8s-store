@@ -63,6 +63,28 @@ class WooCommerceMcpServiceTest {
         assertTrue(exception.getMessage().contains("list_products"));
     }
 
+    @Test
+    void storeScopedCallsUseOnlyTheSelectedStoreClient() {
+        McpSyncClient storeTwo = mock(McpSyncClient.class);
+        McpSyncClient storeThree = mock(McpSyncClient.class);
+        com.mcp_gateway_k8s_store.backend.service.WooCommerceMcpClientRegistry registry = mock(com.mcp_gateway_k8s_store.backend.service.WooCommerceMcpClientRegistry.class);
+        when(registry.require("store-two")).thenReturn(storeTwo);
+        when(registry.require("store-three")).thenReturn(storeThree);
+        when(storeTwo.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(tool("list_products")), null));
+        when(storeThree.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(tool("list_products")), null));
+        McpSchema.CallToolResult result = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("[]")), false, null, Map.of());
+        when(storeTwo.callTool(any())).thenReturn(result);
+        when(storeThree.callTool(any())).thenReturn(result);
+        WooCommerceMcpService scoped = new WooCommerceMcpService(List.of(client), new ObjectMapper(), registry);
+
+        scoped.listProducts("store-two", 1, 10, "");
+        scoped.listProducts("store-three", 1, 10, "");
+
+        verify(storeTwo).callTool(any());
+        verify(storeThree).callTool(any());
+        verify(client, org.mockito.Mockito.never()).callTool(any());
+    }
+
     private McpSchema.Tool tool(String name) {
         return McpSchema.Tool.builder(name, Map.of()).build();
     }

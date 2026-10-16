@@ -28,6 +28,15 @@ button { cursor: pointer; }
 input, select, textarea { box-sizing: border-box; width: 100%; border: 1px solid #d5dce7; border-radius: 7px; background: #fff; color: #263247; padding: 10px 11px; font-size: 13px; transition: border-color .15s, box-shadow .15s; }
 input:focus, select:focus, textarea:focus { outline: 0; border-color: #7597dc; box-shadow: 0 0 0 3px #5484da20; }
 .records { border-top: 1px solid #edf0f5; }
+.records article.record { display: flex; align-items: flex-start; gap: 12px; }
+.records article.record > span:first-child { flex: 1; }
+.store-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.store-actions button, .records article.record > span:first-child button { padding: 6px 9px; color: #526075; background: #fff; border: 1px solid #dce2eb; border-radius: 6px; font-size: 10px; }
+.records article.record a { color: #315fc0; font-size: 11px; text-decoration: none; }
+.records article.record a:hover { text-decoration: underline; }
+.records article.record .error-text { color: #a33d33; white-space: normal; }
+.store-picker { display: flex; align-items: center; gap: 7px; margin-left: auto; color: #526075; font-size: 11px; font-weight: 600; }
+.store-picker select { width: auto; min-width: 160px; padding: 7px 9px; font-size: 11px; }
 .record { width: 100%; justify-content: space-between; text-align: left; border: 0; border-bottom: 1px solid #edf0f5; background: white; padding: 14px 5px; color: #263247; transition: background .12s; }
 .record:hover { background: #f7f9fd; }
 .record span:first-child { display: grid; gap: 4px; min-width: 0; }

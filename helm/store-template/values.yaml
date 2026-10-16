@@ -1,0 +1,71 @@
+store:
+  id: ""
+  localPort: 38082
+
+wordpress:
+  wordpressUsername: admin
+  wordpressEmail: admin@example.com
+  wordpressBlogName: MCP Gateway Store
+  image:
+    # Temporary local-development compatibility with archived Bitnami images.
+    repository: bitnamilegacy/wordpress
+    tag: 6.8.2-debian-12-r5
+  existingSecret: wordpress-credentials
+  allowEmptyPassword: false
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+  commonLabels:
+    app.kubernetes.io/managed-by: mcp-gateway
+  podLabels:
+    app.kubernetes.io/managed-by: mcp-gateway
+  networkPolicy:
+    enabled: false
+  mariadb:
+    enabled: true
+    architecture: standalone
+    image:
+      repository: bitnamilegacy/mariadb
+      tag: 12.0.2-debian-12-r0
+    auth:
+      database: storedb
+      username: storeuser
+      existingSecret: mariadb-credentials
+    primary:
+      persistence:
+        enabled: true
+        size: 2Gi
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: 750m
+          memory: 768Mi
+    networkPolicy:
+      enabled: false
+
+resourceQuota:
+  requests.cpu: "2"
+  requests.memory: 2Gi
+  limits.cpu: "3"
+  limits.memory: 3Gi
+  persistentvolumeclaims: "2"
+  requests.storage: 4Gi
+
+limitRange:
+  default:
+    cpu: 750m
+    memory: 768Mi
+  defaultRequest:
+    cpu: 250m
+    memory: 256Mi

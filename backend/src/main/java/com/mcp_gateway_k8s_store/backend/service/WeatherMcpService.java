@@ -24,9 +24,6 @@ public class WeatherMcpService {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * Returns the tools exposed by the Weather MCP server.
-     */
     public List<String> getAvailableTools() {
         return mcpClients.stream()
                 .filter(McpSyncClient::isInitialized)
@@ -38,9 +35,7 @@ public class WeatherMcpService {
                 .toList();
     }
 
-    /**
-     * Returns Weather MCP connection information.
-     */
+
     public Map<String, Object> getConnectionStatus() {
         List<McpSyncClient> initializedClients = mcpClients.stream()
                 .filter(McpSyncClient::isInitialized)
@@ -56,9 +51,6 @@ public class WeatherMcpService {
         );
     }
 
-    /**
-     * Searches for a city or location.
-     */
     public Object searchLocation(String location) {
         return invoke(
                 "search_location",
@@ -66,9 +58,6 @@ public class WeatherMcpService {
         );
     }
 
-    /**
-     * Retrieves current weather conditions.
-     */
     public Object getCurrentWeather(String location) {
         return invoke(
                 "get_current_weather",
@@ -76,9 +65,6 @@ public class WeatherMcpService {
         );
     }
 
-    /**
-     * Retrieves a daily forecast.
-     */
     public Object getWeatherForecast(String location, int days) {
         if (days < 1 || days > 7) {
             throw new IllegalArgumentException(
@@ -101,10 +87,6 @@ public class WeatherMcpService {
                 || toolName.equals("get_weather_forecast");
     }
 
-    /**
-     * Finds the initialized MCP client that exposes the requested tool,
-     * invokes it, and parses its response.
-     */
     private Object invoke(
             String toolName,
             Map<String, Object> arguments

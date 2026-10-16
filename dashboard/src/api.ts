@@ -7,6 +7,7 @@ const api = axios.create({
 })
 
 export type Credentials = { username: string; password: string }
+export type ManagedStore = { id: string; name: string; namespace: string; helmRelease: string; storeUrl: string | null; status: 'PROVISIONING' | 'READY' | 'FAILED' | 'DELETING'; errorMessage: string | null; createdAt: string | null }
 export type Page<T> = { items: T[]; hasMore: boolean }
 export type Product = { id: number; name: string; price: string; status: string; type: string }
 export type Order = { id: number; number: string; status: string; total: string; currency: string; date_created: string }
@@ -22,12 +23,12 @@ export type CurrentWeatherResponse = { location?: WeatherLocation; current?: Wea
 export type DailyForecast = { date: string; conditions?: string; weatherCode?: number; maxTemperatureC?: number; minTemperatureC?: number; precipitationProbabilityPercent?: number; maxWindSpeedKmh?: number }
 export type ForecastResponse = { location?: WeatherLocation; forecast?: DailyForecast[]; units?: Record<string, string> }
 
-function config(credentials: Credentials) {
-  return { auth: credentials }
+function config(credentials: Credentials, storeId?: string) {
+  return { auth: credentials, ...(storeId ? { params: { storeId } } : {}) }
 }
 
-async function list<T>(path: string, credentials: Credentials, page: number, perPage: number, extra = {}) {
-  const response = await api.get<T[]>(path, { ...config(credentials), params: { page, perPage, ...extra } })
+async function list<T>(path: string, credentials: Credentials, page: number, perPage: number, extra = {}, storeId?: string) {
+  const response = await api.get<T[]>(path, { auth: credentials, params: { page, perPage, ...extra, ...(storeId ? { storeId } : {}) } })
   const items = response.data
   return { items, hasMore: items.length === perPage }
 }
@@ -35,22 +36,33 @@ async function list<T>(path: string, credentials: Credentials, page: number, per
 export const commerceApi = {
   status: async (credentials: Credentials) =>
     (await api.get<BackendStatus>('/api/woocommerce/status', config(credentials))).data,
-  products: (credentials: Credentials, page: number, search: string) =>
-    list<Product>('/api/woocommerce/products', credentials, page, 10, search ? { search } : {}),
-  product: async (credentials: Credentials, id: number) =>
-    (await api.get<Product>(`/api/woocommerce/products/${id}`, config(credentials))).data,
-  createProduct: async (credentials: Credentials, input: { name: string; regularPrice: string; description: string; type: string }) =>
-    (await api.post<Product>('/api/woocommerce/products', input, config(credentials))).data,
-  orders: (credentials: Credentials, page: number, status: string) =>
-    list<Order>('/api/woocommerce/orders', credentials, page, 10, status ? { status } : {}),
-  order: async (credentials: Credentials, id: number) =>
-    (await api.get<Order>(`/api/woocommerce/orders/${id}`, config(credentials))).data,
-  updateOrderStatus: async (credentials: Credentials, id: number, status: string) =>
-    (await api.put<Order>(`/api/woocommerce/orders/${id}/status`, { status }, config(credentials))).data,
-  customers: (credentials: Credentials, page: number) =>
-    list<Customer>('/api/woocommerce/customers', credentials, page, 10),
-  customer: async (credentials: Credentials, id: number) =>
-    (await api.get<Customer>(`/api/woocommerce/customers/${id}`, config(credentials))).data,
+  products: (credentials: Credentials, page: number, search: string, storeId?: string) =>
+    list<Product>('/api/woocommerce/products', credentials, page, 10, search ? { search } : {}, storeId),
+  product: async (credentials: Credentials, id: number, storeId?: string) =>
+    (await api.get<Product>(`/api/woocommerce/products/${id}`, config(credentials, storeId))).data,
+  createProduct: async (credentials: Credentials, input: { name: string; regularPrice: string; description: string; type: string }, storeId?: string) =>
+    (await api.post<Product>('/api/woocommerce/products', input, config(credentials, storeId))).data,
+  orders: (credentials: Credentials, page: number, status: string, storeId?: string) =>
+    list<Order>('/api/woocommerce/orders', credentials, page, 10, status ? { status } : {}, storeId),
+  order: async (credentials: Credentials, id: number, storeId?: string) =>
+    (await api.get<Order>(`/api/woocommerce/orders/${id}`, config(credentials, storeId))).data,
+  updateOrderStatus: async (credentials: Credentials, id: number, status: string, storeId?: string) =>
+    (await api.put<Order>(`/api/woocommerce/orders/${id}/status`, { status }, config(credentials, storeId))).data,
+  customers: (credentials: Credentials, page: number, storeId?: string) =>
+    list<Customer>('/api/woocommerce/customers', credentials, page, 10, {}, storeId),
+  customer: async (credentials: Credentials, id: number, storeId?: string) =>
+    (await api.get<Customer>(`/api/woocommerce/customers/${id}`, config(credentials, storeId))).data,
+}
+
+export const storesApi = {
+  list: async (credentials: Credentials) => (await api.get<ManagedStore[]>('/api/stores', config(credentials))).data,
+  create: async (credentials: Credentials, name: string) => (await api.post<ManagedStore>('/api/stores', { name }, config(credentials))).data,
+  retry: async (credentials: Credentials, id: string) => (await api.post<ManagedStore>(`/api/stores/${id}/retry`, {}, config(credentials))).data,
+  remove: async (credentials: Credentials, id: string) => (await api.delete<ManagedStore>(`/api/stores/${id}`, config(credentials))).data,
+}
+
+export const storeWooApi = {
+  tools: async (credentials: Credentials, storeId: string) => (await api.get<string[]>('/api/woocommerce/store-tools', { ...config(credentials), params: { storeId } })).data,
 }
 
 export const githubApi = {
@@ -93,6 +105,8 @@ export function errorMessage(error: unknown) {
     if (detail) return String(detail)
     if (error.code === 'ECONNABORTED') return 'The request timed out. Try again.'
     if (!error.response) return 'Cannot reach the backend. Check that Spring Boot is running.'
+    if (error.response.status >= 500) return `Spring Boot returned HTTP ${error.response.status}. Check the backend logs for details.`
+    if (error.response.status >= 400) return `The backend rejected the request (HTTP ${error.response.status}). Check the request values and current store status.`
   }
   return error instanceof Error ? error.message : 'The request failed.'
 }

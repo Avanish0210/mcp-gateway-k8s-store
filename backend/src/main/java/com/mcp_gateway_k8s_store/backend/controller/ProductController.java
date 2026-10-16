@@ -27,18 +27,20 @@ public class ProductController {
     @GetMapping
     public Object list(@RequestParam(defaultValue = "1") @Min(1) int page,
                        @RequestParam(defaultValue = "10") @Min(1) @Max(100) int perPage,
-                       @RequestParam(required = false) String search) {
-        return service.listProducts(page, perPage, search);
+                       @RequestParam(required = false) String search,
+                       @RequestParam(required = false) String storeId) {
+        return storeId == null ? service.listProducts(page, perPage, search) : service.listProducts(storeId, page, perPage, search);
     }
 
     @GetMapping("/{productId}")
-    public Object get(@PathVariable @Min(1) long productId) {
-        return service.getProduct(productId);
+    public Object get(@PathVariable @Min(1) long productId, @RequestParam(required = false) String storeId) {
+        return storeId == null ? service.getProduct(productId) : service.getProduct(storeId, productId);
     }
 
     @PostMapping
-    public Object create(@Valid @RequestBody CreateProductRequest request) {
-        return service.createProduct(request.name(), request.regularPrice().toPlainString(),
+    public Object create(@Valid @RequestBody CreateProductRequest request, @RequestParam(required = false) String storeId) {
+        return storeId == null ? service.createProduct(request.name(), request.regularPrice().toPlainString(),
+                request.description(), request.type()) : service.createProduct(storeId, request.name(), request.regularPrice().toPlainString(),
                 request.description(), request.type());
     }
 }

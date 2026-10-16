@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { commerceApi, errorMessage, githubApi } from './api'
-import type { Credentials, Customer, GitHubStatus, GitHubTool, Order, Product } from './api'
+import { commerceApi, errorMessage, githubApi, storesApi } from './api'
+import type { Credentials, Customer, GitHubStatus, GitHubTool, ManagedStore, Order, Product } from './api'
 import GitHubPanel from './GitHubPanel'
 import WeatherPanel from './WeatherPanel'
+import ManagedStoresPanel from './ManagedStoresPanel'
 import './App.css'
 
 type Section = 'products' | 'orders' | 'customers'
-type Dashboard = 'woocommerce' | 'github' | 'weather'
+type Dashboard = 'woocommerce' | 'github' | 'weather' | 'stores'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
@@ -30,25 +31,33 @@ function App() {
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null)
   const [githubTools, setGithubTools] = useState<GitHubTool[]>([])
   const [githubRefreshing, setGithubRefreshing] = useState(false)
+  const [managedStores, setManagedStores] = useState<ManagedStore[]>([])
+  const [activeStoreId, setActiveStoreId] = useState('')
+  const syncManagedStores = useCallback((stores: ManagedStore[]) => {
+    setManagedStores(stores)
+    setActiveStoreId((current) => current && stores.some((store) => store.id === current && store.status === 'READY') ? current : '')
+  }, [])
 
   useEffect(() => {
     if (!connected) return
     let active = true
-    setLoading(true)
-    setError('')
-    setDetail(null)
-    const request = section === 'products'
-      ? commerceApi.products(credentials, page, search)
-      : section === 'orders'
-        ? commerceApi.orders(credentials, page, statusFilter)
-        : commerceApi.customers(credentials, page)
-    request.then((result) => {
-      if (active) { setItems(result.items); setHasMore(result.hasMore) }
-    }).catch((reason: unknown) => {
-      if (active) { setItems([]); setHasMore(false); setError(errorMessage(reason)) }
-    }).finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [connected, credentials, section, page, search, statusFilter])
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError('')
+      setDetail(null)
+      const request = section === 'products'
+        ? commerceApi.products(credentials, page, search, activeStoreId || undefined)
+        : section === 'orders'
+          ? commerceApi.orders(credentials, page, statusFilter, activeStoreId || undefined)
+          : commerceApi.customers(credentials, page, activeStoreId || undefined)
+      request.then((result) => {
+        if (active) { setItems(result.items); setHasMore(result.hasMore) }
+      }).catch((reason: unknown) => {
+        if (active) { setItems([]); setHasMore(false); setError(errorMessage(reason)) }
+      }).finally(() => { if (active) setLoading(false) })
+    }, 0)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [connected, credentials, section, page, search, statusFilter, activeStoreId])
 
   async function connect(event: FormEvent) {
     event.preventDefault()
@@ -76,6 +85,7 @@ function App() {
       const result = await commerceApi.products(credentials, 1, '')
       setItems(result.items)
       setHasMore(result.hasMore)
+      try { syncManagedStores(await storesApi.list(credentials)) } catch { syncManagedStores([]) }
       setConnected(true)
     } catch (reason) {
       setConnected(false)
@@ -99,9 +109,9 @@ function App() {
     setDetail(null)
     setLoading(true)
     try {
-      const value = section === 'products' ? await commerceApi.product(credentials, id)
-        : section === 'orders' ? await commerceApi.order(credentials, id)
-          : await commerceApi.customer(credentials, id)
+      const value = section === 'products' ? await commerceApi.product(credentials, id, activeStoreId || undefined)
+        : section === 'orders' ? await commerceApi.order(credentials, id, activeStoreId || undefined)
+          : await commerceApi.customer(credentials, id, activeStoreId || undefined)
       setDetail(value)
     } catch (reason) { setError(errorMessage(reason)) }
     finally { setLoading(false) }
@@ -117,12 +127,12 @@ function App() {
         regularPrice: String(form.get('regularPrice')),
         description: String(form.get('description')),
         type: String(form.get('type')),
-      })
+      }, activeStoreId || undefined)
       setNotice('Product created.')
       setShowCreate(false)
       setPage(1)
       setSearch('')
-      const result = await commerceApi.products(credentials, 1, '')
+      const result = await commerceApi.products(credentials, 1, '', activeStoreId || undefined)
       setItems(result.items)
     } catch (reason) { setError(errorMessage(reason)) }
   }
@@ -130,7 +140,7 @@ function App() {
   async function changeOrderStatus(order: Order, nextStatus: string) {
     setError('')
     try {
-      const updated = await commerceApi.updateOrderStatus(credentials, order.id, nextStatus)
+      const updated = await commerceApi.updateOrderStatus(credentials, order.id, nextStatus, activeStoreId || undefined)
       setDetail(updated)
       setItems((current) => current.map((item) => 'id' in item && item.id === order.id ? updated : item))
       setNotice(`Order ${order.number || order.id} updated.`)
@@ -153,9 +163,10 @@ function App() {
         <button className={dashboard === 'woocommerce' ? 'tab active' : 'tab'} onClick={() => { setDashboard('woocommerce'); setError('') }}>WooCommerce</button>
         <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
         <button className={dashboard === 'weather' ? 'tab active' : 'tab'} onClick={() => { setDashboard('weather'); setError('') }}>Weather MCP</button>
+        <button className={dashboard === 'stores' ? 'tab active' : 'tab'} onClick={() => { setDashboard('stores'); setError('') }}>Stores</button>
       </nav>
 
-      {dashboard === 'weather' ? <WeatherPanel /> : dashboard === 'github' ? <>
+      {dashboard === 'stores' && connected ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel /> : dashboard === 'github' ? <>
         {!githubStatus?.githubConnected && <form className="connect-card" onSubmit={connect}>
           <h2>Connect to GitHub MCP</h2>
           <p>Use the Spring Boot HTTP Basic credentials. GitHub credentials stay on the backend and are never entered here.</p>
@@ -178,6 +189,7 @@ function App() {
       </form> : <>
         <nav className="tabs" aria-label="Store resources">
           {(['products', 'orders', 'customers'] as Section[]).map((item) => <button key={item} className={section === item ? 'tab active' : 'tab'} onClick={() => { setSection(item); setPage(1); setDetail(null); setNotice('') }}>{item}</button>)}
+          <label className="store-picker">Store<select value={activeStoreId} onChange={(event) => { setActiveStoreId(event.target.value); setPage(1); setDetail(null) }}><option value="">Store 1 · ecommerce</option>{managedStores.filter((store) => store.namespace !== 'ecommerce' && store.status === 'READY').map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
           <button className="disconnect" onClick={() => { setConnected(false); setCredentials({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setGithubStatus(null); setGithubTools([]); setError('') }}>Disconnect</button>
         </nav>
 

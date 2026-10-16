@@ -1,7 +1,6 @@
 package com.mcp_gateway_k8s_store.backend.controller;
 
 import com.mcp_gateway_k8s_store.backend.service.GitHubMcpService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -9,10 +8,14 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/github")
-@RequiredArgsConstructor
 public class GitHubController {
 
     private final GitHubMcpService githubMcpService;
+
+    public GitHubController(GitHubMcpService githubMcpService) {
+        this.githubMcpService = githubMcpService;
+    }
+
     @GetMapping("/status")
     public Map<String, Object> getConnectionStatus() {
         return githubMcpService.getConnectionStatus();

@@ -22,7 +22,20 @@ COPY backend/src ./src
 RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
-RUN apk add --no-cache nodejs \
+ARG KUBECTL_VERSION=v1.37.1
+ARG HELM_VERSION=v3.22.0
+ARG TARGETARCH
+RUN apk add --no-cache nodejs curl ca-certificates tar \
+    && curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    && curl -fsSLo /tmp/kubectl.sha256 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl.sha256" \
+    && echo "$(cat /tmp/kubectl.sha256)  /tmp/kubectl" | sha256sum -c - \
+    && install -m 0755 /tmp/kubectl /usr/local/bin/kubectl \
+    && curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-${TARGETARCH}.tar.gz" \
+    && curl -fsSLo /tmp/helm.tar.gz.sha256sum "https://get.helm.sh/helm-${HELM_VERSION}-linux-${TARGETARCH}.tar.gz.sha256sum" \
+    && echo "$(cut -d ' ' -f 1 /tmp/helm.tar.gz.sha256sum)  /tmp/helm.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/helm.tar.gz -C /tmp \
+    && install -m 0755 "/tmp/linux-${TARGETARCH}/helm" /usr/local/bin/helm \
+    && rm -rf /tmp/kubectl* /tmp/helm.tar.gz* /tmp/linux-${TARGETARCH} \
     && addgroup -g 10001 -S app \
     && adduser -u 10001 -S app -G app
 
@@ -45,6 +58,7 @@ COPY --from=weather-mcp-build --chown=10001:10001 \
     /workspace/weather/node_modules /app/mcp-servers/weather/node_modules
 COPY --from=weather-mcp-build --chown=10001:10001 \
     /workspace/weather/dist /app/mcp-servers/weather/dist
+COPY --chown=10001:10001 helm/store-template /app/helm/store-template
 
 ENV MCP_NODE_COMMAND=node
 ENV MCP_SERVER_PATH=/app/mcp-servers/woocommerce/dist/server.js
