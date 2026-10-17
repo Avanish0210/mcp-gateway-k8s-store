@@ -14,7 +14,11 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
-@Table(name = "app_users", uniqueConstraints = @UniqueConstraint(name = "uk_app_users_username", columnNames = "username"))
+@Table(name = "app_users", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_app_users_username", columnNames = "username"),
+        @UniqueConstraint(name = "uk_app_users_username_normalized", columnNames = "username_normalized"),
+        @UniqueConstraint(name = "uk_app_users_email_normalized", columnNames = "email_normalized")
+})
 public class AppUser {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -22,6 +26,15 @@ public class AppUser {
 
     @Column(nullable = false, length = 80)
     private String username;
+
+    @Column(name = "username_normalized", length = 80)
+    private String usernameNormalized;
+
+    @Column(length = 254)
+    private String email;
+
+    @Column(name = "email_normalized", length = 254)
+    private String emailNormalized;
 
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
@@ -45,11 +58,23 @@ public class AppUser {
         this.enabled = true;
     }
 
+    public AppUser(String username, String email, String passwordHash, UserRole role) {
+        this(username, passwordHash, role);
+        this.email = email == null ? null : email.trim();
+        this.emailNormalized = this.email == null ? null : this.email.toLowerCase(java.util.Locale.ROOT);
+    }
+
     @PrePersist
-    protected void onCreate() { createdAt = Instant.now(); }
+    protected void onCreate() {
+        createdAt = Instant.now();
+        usernameNormalized = username == null ? null : username.toLowerCase(java.util.Locale.ROOT);
+        if (email != null) { email = email.trim(); emailNormalized = email.toLowerCase(java.util.Locale.ROOT); }
+    }
 
     public String getId() { return id; }
     public String getUsername() { return username; }
+    public String getEmail() { return email; }
+    public String getEmailNormalized() { return emailNormalized; }
     public String getPasswordHash() { return passwordHash; }
     public UserRole getRole() { return role; }
     public boolean isEnabled() { return enabled; }

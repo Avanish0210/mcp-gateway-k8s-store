@@ -3,6 +3,8 @@ package com.mcp_gateway_k8s_store.backend.controller;
 import com.mcp_gateway_k8s_store.backend.dto.CreateStoreRequest;
 import com.mcp_gateway_k8s_store.backend.dto.StoreResponse;
 import com.mcp_gateway_k8s_store.backend.service.StoreProvisioningService;
+import com.mcp_gateway_k8s_store.backend.service.AuditService;
+import com.mcp_gateway_k8s_store.backend.model.AuditOutcome;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,8 +18,9 @@ import java.util.List;
 public class StoreProvisioningController {
 
     private final StoreProvisioningService storeProvisioningService;
+    private final AuditService audit;
 
-    public StoreProvisioningController(StoreProvisioningService storeProvisioningService) { this.storeProvisioningService = storeProvisioningService; }
+    public StoreProvisioningController(StoreProvisioningService storeProvisioningService, AuditService audit) { this.storeProvisioningService = storeProvisioningService; this.audit = audit; }
 
     @GetMapping
     public List<StoreResponse> listStores() {
@@ -34,17 +37,39 @@ public class StoreProvisioningController {
     public StoreResponse createStore(
             @Valid @RequestBody CreateStoreRequest request
     ) {
-        return storeProvisioningService.createStore(request);
+        long started = System.nanoTime();
+        try {
+            StoreResponse response = storeProvisioningService.createStore(request);
+            audit.recordCurrent("STORE_CREATED", null, null, response.namespace(), AuditOutcome.SUCCESS,
+                    (System.nanoTime() - started) / 1_000_000, null, "Store provisioning accepted");
+            return response;
+        } catch (RuntimeException failure) {
+            audit.recordCurrent("STORE_CREATED", null, null, null, AuditOutcome.FAILURE,
+                    (System.nanoTime() - started) / 1_000_000, failure, null);
+            throw failure;
+        }
     }
 
     @PostMapping("/{id}/retry")
     public StoreResponse retry(@PathVariable String id) {
-        return storeProvisioningService.retryStore(id);
+        StoreResponse response = storeProvisioningService.retryStore(id);
+        audit.recordCurrent("STORE_PROVISIONING_RETRIED", null, null, response.namespace(), AuditOutcome.SUCCESS, null, null, "Store provisioning retry accepted");
+        return response;
     }
 
     @DeleteMapping("/{id}")
     public StoreResponse delete(@PathVariable String id) {
-        return storeProvisioningService.deleteStore(id);
+        long started = System.nanoTime();
+        try {
+            StoreResponse response = storeProvisioningService.deleteStore(id);
+            audit.recordCurrent("STORE_DELETION_REQUESTED", null, null, response.namespace(), AuditOutcome.SUCCESS,
+                    (System.nanoTime() - started) / 1_000_000, null, "Store deletion accepted");
+            return response;
+        } catch (RuntimeException failure) {
+            audit.recordCurrent("STORE_DELETION_REQUESTED", null, null, id, AuditOutcome.FAILURE,
+                    (System.nanoTime() - started) / 1_000_000, failure, null);
+            throw failure;
+        }
     }
 
     @GetMapping("/{id}/status")

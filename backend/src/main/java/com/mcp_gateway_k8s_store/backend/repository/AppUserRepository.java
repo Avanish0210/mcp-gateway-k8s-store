@@ -8,4 +8,7 @@ import java.util.Optional;
 public interface AppUserRepository extends JpaRepository<AppUser, String> {
     Optional<AppUser> findByUsernameIgnoreCase(String username);
     boolean existsByUsernameIgnoreCase(String username);
+    Optional<AppUser> findByEmailNormalized(String emailNormalized);
+    boolean existsByEmailNormalized(String emailNormalized);
+    java.util.List<AppUser> findAllByOrderByCreatedAtAsc();
 }

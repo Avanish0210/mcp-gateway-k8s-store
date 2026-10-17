@@ -18,3 +18,8 @@ spring:
             github:
               url: ${GITHUB_MCP_URL:http://localhost:8082}
               endpoint: /mcp
+      server:
+        protocol: STATELESS
+        type: SYNC
+        annotation-scanner:
+          enabled: true

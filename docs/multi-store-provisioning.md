@@ -34,12 +34,11 @@ helm lint .\helm\store-template
 helm template ecommerce-store-2 .\helm\store-template --namespace ecommerce-store-2 --set store.id=00000000-0000-0000-0000-000000000002
 ```
 
-Configure `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the backend process environment or its local secret manager. For Docker Compose, prepare a flattened, container-readable kubeconfig and rebuild the backend image. The helper verifies that the active context is Minikube, embeds the local certificates, and rewrites a loopback API endpoint to Docker Desktop's host gateway. The generated file contains client credentials and is gitignored.
+Configure `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the backend process environment or its local secret manager. For Docker Compose, prepare a flattened, container-readable kubeconfig. Minikube may change its API host port when it restarts, so refresh this file whenever a lifecycle operation reports `connection refused` or a TLS hostname error for `host.docker.internal`. The helper verifies the active context, runs `minikube update-context`, embeds the local certificates, routes the API through Docker Desktop's host gateway, and validates TLS against the certificate's `localhost` name. The generated file contains client credentials and is gitignored. Updating the mounted file does not require rebuilding or restarting the backend.
 
 ```powershell
 Push-Location .
 .\scripts\Prepare-DockerKubeconfig.ps1
-docker compose -f .\backend\compose.yaml build backend
 docker compose -f .\backend\compose.yaml up -d backend
 docker compose -f .\backend\compose.yaml logs --tail 100 backend
 Pop-Location

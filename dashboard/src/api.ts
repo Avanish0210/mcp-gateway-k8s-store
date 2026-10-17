@@ -10,8 +10,15 @@ export type UserRole = 'ADMIN' | 'MEMBER'
 export type UserProfile = { id: string; username: string; role: UserRole; enabled: boolean }
 export type LoginResponse = { accessToken: string; tokenType: 'Bearer'; expiresIn: number; user: UserProfile }
 export type Credentials = { accessToken: string; username: string; role: UserRole }
+export type ApiKeyMetadata = { id: string; name: string; prefix: string; createdAt: string; lastUsedAt: string | null; expiresAt: string | null; revoked: boolean }
+export type CreatedApiKey = { key: ApiKeyMetadata; apiKey: string }
+export type TeamMember = { id: string; username: string; email: string | null; role: UserRole; enabled: boolean; createdAt: string }
+export type TeamInvitation = { id: string; email: string; status: 'PENDING' | 'EXPIRED' | 'REVOKED' | 'ACCEPTED'; createdAt: string; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; inviteUrl: string | null }
+export type CreatedInvitation = { id: string; email: string; status: string; createdAt: string; expiresAt: string; inviteUrl: string | null; deliveryMode: 'DEVELOPMENT_LINK' | 'EMAIL' }
 export type ManagedStore = { id: string; name: string; namespace: string; helmRelease: string; storeUrl: string | null; status: 'PROVISIONING' | 'READY' | 'FAILED' | 'DELETING'; errorMessage: string | null; createdAt: string | null }
 export type Page<T> = { items: T[]; hasMore: boolean }
+export type AuditEvent = { id: string; actorId: string | null; actorUsername: string | null; eventType: string; serverId: string | null; toolName: string | null; storeId: string | null; outcome: 'SUCCESS' | 'FAILURE'; occurredAt: string; durationMs: number | null; errorCategory: string | null; description: string | null; correlationId: string | null }
+export type AuditPage = { content: AuditEvent[]; number: number; totalPages: number; totalElements: number }
 export type Product = { id: number; name: string; price: string; status: string; type: string }
 export type Order = { id: number; number: string; status: string; total: string; currency: string; date_created: string }
 export type Customer = { id: number; first_name: string; last_name: string; email: string; username: string }
@@ -67,6 +74,28 @@ export const storesApi = {
 export const authApi = {
   login: async (username: string, password: string) => (await api.post<LoginResponse>('/api/auth/login', { username, password })).data,
   profile: async (credentials: Credentials) => (await api.get<UserProfile>('/api/auth/me', config(credentials))).data,
+  acceptInvitation: async (token: string, username: string, password: string) =>
+    (await api.post<{ id: string; username: string; email: string; role: UserRole }>('/api/auth/accept-invitation', { token, username, password })).data,
+}
+
+export const apiKeysApi = {
+  list: async (credentials: Credentials) => (await api.get<ApiKeyMetadata[]>('/api/keys', config(credentials))).data,
+  create: async (credentials: Credentials, name: string, expiresAt?: string) => (await api.post<CreatedApiKey>('/api/keys', { name, ...(expiresAt ? { expiresAt } : {}) }, config(credentials))).data,
+  revoke: async (credentials: Credentials, id: string) => api.delete(`/api/keys/${encodeURIComponent(id)}`, config(credentials)),
+}
+
+export const teamApi = {
+  members: async (credentials: Credentials) => (await api.get<TeamMember[]>('/api/team/members', config(credentials))).data,
+  invitations: async (credentials: Credentials) => (await api.get<TeamInvitation[]>('/api/team/invitations', config(credentials))).data,
+  invite: async (credentials: Credentials, email: string) => (await api.post<CreatedInvitation>('/api/team/invitations', { email }, config(credentials))).data,
+  revokeInvitation: async (credentials: Credentials, id: string) => api.delete(`/api/team/invitations/${encodeURIComponent(id)}`, config(credentials)),
+}
+
+export const auditApi = {
+  list: async (credentials: Credentials, filters: { page: number; eventType?: string; outcome?: string; serverId?: string; toolName?: string; storeId?: string; actorId?: string; from?: string; to?: string }) => {
+    const path = credentials.role === 'ADMIN' ? '/api/audit' : '/api/audit/me'
+    return (await api.get<AuditPage>(path, { ...config(credentials), params: { page: filters.page, size: 25, ...Object.fromEntries(Object.entries(filters).filter(([key, value]) => key !== 'page' && Boolean(value))) } })).data
+  },
 }
 
 export const storeWooApi = {

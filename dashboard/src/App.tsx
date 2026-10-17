@@ -5,15 +5,21 @@ import type { Credentials, Customer, GitHubStatus, GitHubTool, ManagedStore, Ord
 import GitHubPanel from './GitHubPanel'
 import WeatherPanel from './WeatherPanel'
 import ManagedStoresPanel from './ManagedStoresPanel'
+import ApiKeysPanel from './ApiKeysPanel'
+import TeamPanel from './TeamPanel'
+import AuditPanel from './AuditPanel'
 import './App.css'
 
 type Section = 'products' | 'orders' | 'customers'
-type Dashboard = 'woocommerce' | 'github' | 'weather' | 'stores'
+type Dashboard = 'woocommerce' | 'github' | 'weather' | 'stores' | 'api-keys' | 'team' | 'audit'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
   const [credentials, setCredentials] = useState<Credentials>({ accessToken: '', username: '', role: 'MEMBER' })
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [acceptForm, setAcceptForm] = useState({ username: '', password: '' })
+  const [invitationAccepted, setInvitationAccepted] = useState(false)
+  const invitationToken = new URLSearchParams(window.location.search).get('token') || ''
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [backendStatus, setBackendStatus] = useState<{ configuredClients: number; initializedClients: number; available: boolean } | null>(null)
@@ -90,6 +96,18 @@ function App() {
     } finally { setConnecting(false) }
   }
 
+  async function acceptInvitation(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    try {
+      const result = await authApi.acceptInvitation(invitationToken, acceptForm.username, acceptForm.password)
+      setInvitationAccepted(true)
+      setLoginForm({ username: result.username, password: '' })
+      setAcceptForm({ username: '', password: '' })
+      window.history.replaceState({}, '', window.location.pathname)
+    } catch (reason) { setError(errorMessage(reason)) }
+  }
+
   async function refreshGitHub() {
     setError('')
     setGithubRefreshing(true)
@@ -149,6 +167,24 @@ function App() {
     key !== 'id' && value !== null && value !== undefined && typeof value !== 'object' && value !== '',
   ) : []
 
+  if (!credentials.accessToken && invitationToken && !invitationAccepted) return <main className="app-shell auth-shell">
+    <header className="auth-brand"><span className="brand-mark">M</span><div><span className="eyebrow">MCP GATEWAY</span><strong>Team invitation</strong></div></header>
+    <form className="connect-card auth-card" onSubmit={acceptInvitation}>
+      <span className="eyebrow">JOIN THE TEAM</span><h1>Accept your invitation</h1>
+      <p>Choose a username and password. Your account will be created with the MEMBER role.</p>
+      <div className="credentials auth-fields"><label>Username<input autoComplete="username" minLength={3} maxLength={80} required autoFocus value={acceptForm.username} onChange={(event) => setAcceptForm({ ...acceptForm, username: event.target.value })} /></label>
+        <label>Password<input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={acceptForm.password} onChange={(event) => setAcceptForm({ ...acceptForm, password: event.target.value })} /></label></div>
+      <button className="primary auth-submit" type="submit">Create member account</button>
+      {error && <div className="error" role="alert">{error}</div>}
+      <small className="auth-footnote">Use a unique password with at least 12 characters.</small>
+    </form>
+  </main>
+
+  if (!credentials.accessToken && invitationAccepted) return <main className="app-shell auth-shell">
+    <header className="auth-brand"><span className="brand-mark">M</span><div><span className="eyebrow">MCP GATEWAY</span><strong>Team invitation</strong></div></header>
+    <section className="connect-card auth-card"><span className="eyebrow">ACCOUNT CREATED</span><h1>You’re on the team</h1><p>Your MEMBER account is ready. Sign in with the username and password you just created.</p><button className="primary auth-submit" onClick={() => { setInvitationAccepted(false); setError('') }}>Continue to sign in</button></section>
+  </main>
+
   if (!credentials.accessToken) return <main className="app-shell auth-shell">
     <header className="auth-brand"><span className="brand-mark">M</span><div><span className="eyebrow">MCP GATEWAY</span><strong>Store Console</strong></div></header>
     <form className="connect-card auth-card" onSubmit={connect}>
@@ -168,7 +204,7 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : dashboard === 'weather' ? 'Weather MCP' : 'WooCommerce'}</h1></div>
+        <div><span className="eyebrow">MCP GATEWAY · STORE CONSOLE</span><h1>{dashboard === 'github' ? 'GitHub' : dashboard === 'weather' ? 'Weather MCP' : dashboard === 'stores' ? 'Managed stores' : dashboard === 'api-keys' ? 'API keys' : dashboard === 'team' ? 'Team management' : dashboard === 'audit' ? 'Audit log' : 'WooCommerce'}</h1></div>
         <div className="user-badge"><span className="user-avatar">{credentials.username.slice(0, 1).toUpperCase()}</span><span><strong>{credentials.username}</strong><small>{credentials.role}</small></span><button className="disconnect" onClick={() => { setConnected(false); setCredentials({ accessToken: '', username: '', role: 'MEMBER' }); setLoginForm({ username: '', password: '' }); setItems([]); setDetail(null); setBackendStatus(null); setGithubStatus(null); setGithubTools([]); syncManagedStores([]); setDashboard('woocommerce'); setError('') }}>Sign out</button></div>
       </header>
 
@@ -177,9 +213,12 @@ function App() {
         <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
         <button className={dashboard === 'weather' ? 'tab active' : 'tab'} onClick={() => { setDashboard('weather'); setError('') }}>Weather MCP</button>
         {credentials.role === 'ADMIN' && <button className={dashboard === 'stores' ? 'tab active' : 'tab'} onClick={() => { setDashboard('stores'); setError('') }}>Stores</button>}
+        {credentials.role === 'ADMIN' && <button className={dashboard === 'team' ? 'tab active' : 'tab'} onClick={() => { setDashboard('team'); setError('') }}>Team</button>}
+        <button className={dashboard === 'api-keys' ? 'tab active' : 'tab'} onClick={() => { setDashboard('api-keys'); setError('') }}>API keys</button>
+        <button className={dashboard === 'audit' ? 'tab active' : 'tab'} onClick={() => { setDashboard('audit'); setError('') }}>Audit log</button>
       </nav>
 
-      {dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
+      {dashboard === 'audit' ? <AuditPanel credentials={credentials} /> : dashboard === 'team' && credentials.role === 'ADMIN' ? <TeamPanel credentials={credentials} /> : dashboard === 'api-keys' ? <ApiKeysPanel credentials={credentials} /> : dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
         {githubStatus?.githubConnected ? <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} /> : <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>GitHub</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>Sign-in succeeded. The GitHub MCP server is currently unavailable.</p><button className="secondary" onClick={() => void refreshGitHub()} disabled={githubRefreshing}>{githubRefreshing ? 'Checking…' : 'Check connection'}</button></section>}
         {error && <div className="error github-global-error" role="alert">{error}</div>}
       </> : dashboard === 'woocommerce' && !backendStatus?.available ? <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>WooCommerce</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>You are signed in, but the WooCommerce MCP server is unavailable. Check its backend configuration and try again.</p><button className="secondary" onClick={() => void commerceApi.status(credentials).then(setBackendStatus).catch((reason: unknown) => setError(errorMessage(reason)))}>Check connection</button></section> : dashboard === 'woocommerce' ? <>
