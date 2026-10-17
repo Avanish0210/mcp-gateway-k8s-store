@@ -46,6 +46,8 @@ async function list<T>(path: string, credentials: Credentials, page: number, per
 export const commerceApi = {
   status: async (credentials: Credentials) =>
     (await api.get<BackendStatus>('/api/woocommerce/status', config(credentials))).data,
+  tools: async (credentials: Credentials) =>
+    (await api.get<string[]>('/api/woocommerce/tools', config(credentials))).data,
   products: (credentials: Credentials, page: number, search: string, storeId?: string) =>
     list<Product>('/api/woocommerce/products', credentials, page, 10, search ? { search } : {}, storeId),
   product: async (credentials: Credentials, id: number, storeId?: string) =>

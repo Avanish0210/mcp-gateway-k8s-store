@@ -25,7 +25,7 @@ export default function AuditPanel({ credentials }: { credentials: Credentials }
     } catch (reason) { setError(errorMessage(reason)) }
     finally { setLoading(false) }
   }, [credentials, page, eventType, outcome, serverId, toolName, storeId, actorId, from, to])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { const timer = window.setTimeout(() => { void load() }, 0); return () => window.clearTimeout(timer) }, [load])
   return <main className="audit-page">
     <section className="list-panel audit-intro"><div className="panel-heading"><div><span className="eyebrow">SECURITY & ACTIVITY</span><h2>{credentials.role === 'ADMIN' ? 'Global audit log' : 'My activity'}</h2></div><button className="secondary" onClick={() => void load()} disabled={loading}>Refresh</button></div><p>{credentials.role === 'ADMIN' ? 'Administrative actions and MCP tool invocations across the gateway.' : 'Your MCP tool invocations and account actions.'}</p></section>
     <section className="list-panel audit-list">
