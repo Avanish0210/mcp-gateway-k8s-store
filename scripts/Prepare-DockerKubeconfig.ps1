@@ -38,11 +38,13 @@ if ($serverUri.Scheme -ne 'https' -or $serverUri.Host -notin @('127.0.0.1', 'loc
     throw "Unexpected Minikube API endpoint host '$($serverUri.Host)'; refusing to rewrite it."
 }
 $builder = [UriBuilder]$serverUri
-$builder.Host = 'host.docker.internal'
+$builder.Host = $Context
+$builder.Port = 8443
 $config.clusters[0].cluster.server = $builder.Uri.AbsoluteUri.TrimEnd('/')
-# Docker reaches the host through host.docker.internal, which is not in
-# Minikube's API certificate. Validate the same certificate against its
-# localhost SAN while retaining the Docker-reachable address above.
+# The Compose backend joins Minikube's Docker network and reaches the API on
+# its stable in-network endpoint. The published host port can change whenever
+# Minikube restarts, so it must not be used in a long-lived container config.
+# Validate the API certificate against its localhost SAN.
 $config.clusters[0].cluster | Add-Member -NotePropertyName 'tls-server-name' -NotePropertyValue 'localhost' -Force
 
 $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)

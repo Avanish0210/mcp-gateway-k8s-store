@@ -16,6 +16,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-avanish7080}
       SPRING_AI_MCP_CLIENT_ENABLED: ${SPRING_AI_MCP_CLIENT_ENABLED:-true}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?Set GOOGLE_API_KEY in the root .env file or your environment}
       GITHUB_MCP_URL: http://github-mcp:8082
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN:?Set GITHUB_PERSONAL_ACCESS_TOKEN in the root .env file or your environment}
       WOOCOMMERCE_URL: ${WOOCOMMERCE_URL:-http://host.docker.internal:8080}
@@ -40,6 +41,9 @@ services:
       INITIAL_MEMBER_PASSWORD: ${INITIAL_MEMBER_PASSWORD:-member7080}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - minikube-api
     depends_on:
       db:
         condition: service_healthy
@@ -79,3 +83,8 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  minikube-api:
+    external: true
+    name: ${KUBERNETES_CONTEXT:-minikube}

@@ -240,3 +240,14 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: #7597dc; b
 .audit-error { color: #a33d33; }
 .audit-description { overflow-wrap: anywhere; }
 @media (max-width: 560px) { .audit-filters { grid-template-columns: 1fr; } .audit-intro, .audit-list { padding: 18px; } }
+.chat-panel { max-width: 980px; margin: 0 auto; }
+.chat-messages { display: grid; gap: 12px; min-height: 320px; max-height: 58vh; overflow-y: auto; padding: 18px 0; }
+.chat-message { max-width: 82%; padding: 12px 15px; border: 1px solid #e3e8f0; border-radius: 12px; background: #fff; }
+.chat-message.user { justify-self: end; background: #f2f6ff; border-color: #d8e3fa; }
+.chat-message strong { color: #526075; font-size: 11px; }
+.chat-message p { margin: 6px 0 0; color: #27364d; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-form { display: flex; align-items: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid #e8ecf2; }
+.chat-form textarea { flex: 1; resize: vertical; min-height: 60px; max-height: 180px; padding: 11px 13px; color: #27364d; background: #fff; border: 1px solid #dce3ed; border-radius: 8px; font: inherit; font-size: 13px; }
+.chat-form textarea:focus { outline: 2px solid #b8c9ed; border-color: #7898d4; }
+.chat-form button { min-height: 42px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

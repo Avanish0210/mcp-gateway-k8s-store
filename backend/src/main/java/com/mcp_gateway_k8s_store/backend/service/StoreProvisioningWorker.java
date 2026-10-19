@@ -21,6 +21,8 @@ public class StoreProvisioningWorker {
 
     public StoreProvisioningWorker(StoreRepository stores, KubernetesStoreAdapter kubernetes, WooCommerceMcpClientRegistry mcpClients) { this.stores = stores; this.kubernetes = kubernetes; this.mcpClients = mcpClients; }
 
+    public void verifyClusterReady() { kubernetes.verifyClusterReady(); }
+
     @Async("storeProvisioningExecutor")
     public void provision(String id) {
         Store store = stores.findById(id).orElse(null);

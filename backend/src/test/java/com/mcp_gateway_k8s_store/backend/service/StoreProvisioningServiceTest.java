@@ -42,6 +42,19 @@ class StoreProvisioningServiceTest {
     }
 
     @Test
+    void unavailableClusterDoesNotPersistAStore() {
+        doThrow(new IllegalStateException("Kubernetes API is unreachable; refresh the Docker kubeconfig."))
+                .when(worker).verifyClusterReady();
+
+        ResponseStatusException failure = assertThrows(ResponseStatusException.class,
+                () -> service.createStore(new CreateStoreRequest("Unavailable")));
+
+        assertEquals(503, failure.getStatusCode().value());
+        assertTrue(records.isEmpty());
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void storeOneCountsTowardMaximumAndStoreFourIsRejected() {
         service.createStore(new CreateStoreRequest("Store Two"));
         service.createStore(new CreateStoreRequest("Store Three"));

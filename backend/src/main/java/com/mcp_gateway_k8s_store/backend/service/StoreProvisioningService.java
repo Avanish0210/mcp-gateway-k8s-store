@@ -53,6 +53,15 @@ public class StoreProvisioningService {
 
     @Transactional
     public synchronized StoreResponse createStore(CreateStoreRequest request) {
+        try {
+            worker.verifyClusterReady();
+        } catch (IllegalStateException unavailable) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "The Kubernetes cluster is not reachable, so the store was not created. "
+                            + unavailable.getMessage()
+            );
+        }
         long registeredStores = storeRepository.count();
         long totalIncludingExistingStore = registeredStores
                 + (storeRepository.existsByNamespaceName(EXISTING_NAMESPACE) ? 0 : 1);

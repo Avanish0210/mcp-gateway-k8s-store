@@ -9,12 +9,13 @@ import ApiKeysPanel from './ApiKeysPanel'
 import TeamPanel from './TeamPanel'
 import AuditPanel from './AuditPanel'
 import DashboardOverview from './DashboardOverview'
+import ChatPanel from './ChatPanel'
 import { ChevronDown } from 'lucide-react'
 import './App.css'
 import './DashboardOverview.css'
 
 type Section = 'products' | 'orders' | 'customers'
-type Dashboard = 'overview' | 'woocommerce' | 'github' | 'weather' | 'stores' | 'api-keys' | 'team' | 'audit'
+type Dashboard = 'overview' | 'chat' | 'woocommerce' | 'github' | 'weather' | 'stores' | 'api-keys' | 'team' | 'audit'
 const orderStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
 
 function App() {
@@ -227,6 +228,7 @@ function App() {
 
       <nav className="tabs dashboard-tabs" aria-label="Workspace sections">
         <button className={dashboard === 'overview' ? 'tab active' : 'tab'} onClick={() => { setDashboard('overview'); setError('') }}>Overview</button>
+        <button className={dashboard === 'chat' ? 'tab active' : 'tab'} onClick={() => { setDashboard('chat'); setError('') }}>AI Chat</button>
         <button className={dashboard === 'woocommerce' ? 'tab active' : 'tab'} onClick={() => { setDashboard('woocommerce'); setError('') }}>WooCommerce</button>
         <button className={dashboard === 'github' ? 'tab active' : 'tab'} onClick={() => { setDashboard('github'); setError('') }}>GitHub</button>
         <button className={dashboard === 'weather' ? 'tab active' : 'tab'} onClick={() => { setDashboard('weather'); setError('') }}>Weather MCP</button>
@@ -236,7 +238,7 @@ function App() {
         <button className={dashboard === 'audit' ? 'tab active' : 'tab'} onClick={() => { setDashboard('audit'); setError('') }}>Audit log</button>
       </nav>
 
-      {dashboard === 'overview' ? <DashboardOverview credentials={credentials} onNavigate={(next) => { setDashboard(next); setError('') }} /> : dashboard === 'audit' ? <AuditPanel credentials={credentials} /> : dashboard === 'team' && credentials.role === 'ADMIN' ? <TeamPanel credentials={credentials} /> : dashboard === 'api-keys' ? <ApiKeysPanel credentials={credentials} /> : dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
+      {dashboard === 'overview' ? <DashboardOverview credentials={credentials} onNavigate={(next) => { setDashboard(next); setError('') }} /> : dashboard === 'chat' ? <ChatPanel credentials={credentials} storeId={activeStoreId || undefined} /> : dashboard === 'audit' ? <AuditPanel credentials={credentials} /> : dashboard === 'team' && credentials.role === 'ADMIN' ? <TeamPanel credentials={credentials} /> : dashboard === 'api-keys' ? <ApiKeysPanel credentials={credentials} /> : dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
         {githubStatus?.githubConnected ? <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} /> : <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>GitHub</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>Sign-in succeeded. The GitHub MCP server is currently unavailable.</p><button className="secondary" onClick={() => void refreshGitHub()} disabled={githubRefreshing}>{githubRefreshing ? 'Checking…' : 'Check connection'}</button></section>}
         {error && <div className="error github-global-error" role="alert">{error}</div>}
       </> : dashboard === 'woocommerce' && !backendStatus?.available ? <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>WooCommerce</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>You are signed in, but the WooCommerce MCP server is unavailable. Check its backend configuration and try again.</p><button className="secondary" onClick={() => void commerceApi.status(credentials).then(setBackendStatus).catch((reason: unknown) => setError(errorMessage(reason)))}>Check connection</button></section> : dashboard === 'woocommerce' ? <>

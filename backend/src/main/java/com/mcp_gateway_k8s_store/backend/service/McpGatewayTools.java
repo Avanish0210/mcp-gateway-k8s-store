@@ -49,6 +49,12 @@ public class McpGatewayTools {
         return audited("woocommerce", "woocommerce_list_products", () -> woo.listProducts(page == null ? 1 : page, perPage == null ? 10 : perPage, search));
     }
 
+    public Object chatListProducts(String storeId, Integer page, Integer perPage, String search) {
+        return audited("woocommerce", "woocommerce_list_products", () -> storeId == null
+                ? woo.listProducts(page == null ? 1 : page, perPage == null ? 10 : perPage, search)
+                : woo.listProducts(storeId, page == null ? 1 : page, perPage == null ? 10 : perPage, search));
+    }
+
     @McpTool(name = "woocommerce_get_product", description = "Get one WooCommerce product by ID")
     public Object getProduct(@McpToolParam(description = "WooCommerce product ID") long productId) { return audited("woocommerce", "woocommerce_get_product", () -> woo.getProduct(productId)); }
 
@@ -59,8 +65,15 @@ public class McpGatewayTools {
         return audited("woocommerce", "woocommerce_list_orders", () -> woo.listOrders(page == null ? 1 : page, perPage == null ? 10 : perPage, status));
     }
 
+    public Object chatListOrders(String storeId, Integer page, Integer perPage, String status) {
+        return audited("woocommerce", "woocommerce_list_orders", () -> storeId == null
+                ? woo.listOrders(page == null ? 1 : page, perPage == null ? 10 : perPage, status)
+                : woo.listOrders(storeId, page == null ? 1 : page, perPage == null ? 10 : perPage, status));
+    }
+
     @McpTool(name = "woocommerce_get_order", description = "Get one WooCommerce order by ID")
     public Object getOrder(@McpToolParam(description = "WooCommerce order ID") long orderId) { return audited("woocommerce", "woocommerce_get_order", () -> woo.getOrder(orderId)); }
+    public Object chatGetOrder(String storeId, long orderId) { return audited("woocommerce", "woocommerce_get_order", () -> storeId == null ? woo.getOrder(orderId) : woo.getOrder(storeId, orderId)); }
 
     @McpTool(name = "woocommerce_list_customers", description = "List WooCommerce customers")
     public Object listCustomers(@McpToolParam(description = "Page number", required = false) Integer page,

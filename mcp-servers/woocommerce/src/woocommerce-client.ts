@@ -99,10 +99,13 @@ export class WooCommerceClient {
             );
         }
 
+        // A stalled WordPress API must not leave the MCP stdio request open
+        // indefinitely. Node 22 supports AbortSignal.timeout natively.
         const response = await fetch(url, {
             ...options,
             method,
             headers,
+            signal: options.signal ?? AbortSignal.timeout(12_000),
         });
 
         const responseText = await response.text();

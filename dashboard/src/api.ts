@@ -32,6 +32,7 @@ export type WeatherCurrent = { time?: string; temperatureC?: number; feelsLikeC?
 export type CurrentWeatherResponse = { location?: WeatherLocation; current?: WeatherCurrent; units?: Record<string, string> }
 export type DailyForecast = { date: string; conditions?: string; weatherCode?: number; maxTemperatureC?: number; minTemperatureC?: number; precipitationProbabilityPercent?: number; maxWindSpeedKmh?: number }
 export type ForecastResponse = { location?: WeatherLocation; forecast?: DailyForecast[]; units?: Record<string, string> }
+export type ChatResponse = { reply: string }
 
 function config(credentials: Credentials, storeId?: string) {
   return { headers: { Authorization: `Bearer ${credentials.accessToken}` }, ...(storeId ? { params: { storeId } } : {}) }
@@ -78,6 +79,11 @@ export const authApi = {
   profile: async (credentials: Credentials) => (await api.get<UserProfile>('/api/auth/me', config(credentials))).data,
   acceptInvitation: async (token: string, username: string, password: string) =>
     (await api.post<{ id: string; username: string; email: string; role: UserRole }>('/api/auth/accept-invitation', { token, username, password })).data,
+}
+
+export const chatApi = {
+  send: async (credentials: Credentials, message: string, storeId?: string) =>
+    (await api.post<ChatResponse>('/api/chat', { message, ...(storeId ? { storeId } : {}) }, { ...config(credentials), timeout: 90000 })).data,
 }
 
 export const apiKeysApi = {
@@ -136,9 +142,11 @@ export function errorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     if (error.response?.status === 401) return 'Your login or session is invalid or expired. Sign in again with your application username and password.'
     if (error.response?.status === 403) return 'The backend authenticated this account but denied access to this action.'
+    if (error.response?.status === 429) return 'Gemini is temporarily rate-limited or its usage quota has been reached. Wait and retry, or check Gemini API usage and limits.'
+    if (error.response?.status === 503) return 'Gemini is temporarily unavailable. Please wait a moment and try again.'
     if (error.response?.status === 502) {
-      const detail = error.response?.data?.detail
-      return detail ? `MCP request failed: ${String(detail)}` : 'The backend could not complete the request through the MCP server.'
+      const detail = error.response?.data?.detail ?? error.response?.data?.message
+      return detail ? `AI assistant request failed: ${String(detail)}` : 'The AI assistant could not complete the request. Check the Gemini and MCP service connections, then try again.'
     }
     const detail = error.response?.data?.detail
     if (detail) return String(detail)

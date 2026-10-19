@@ -201,6 +201,9 @@ public class KubernetesStoreAdapter {
         if (!context.equals(selected)) throw new IllegalStateException("Kubernetes current context does not match the configured managed-store context");
         verifyApiConnectivity();
     }
+
+    /** Fails quickly and clearly before a managed-store request is persisted. */
+    public void verifyClusterReady() { verifyContext(); }
     private void verifyApiConnectivity() {
         IllegalStateException last = null;
         for (int attempt = 1; attempt <= 3; attempt++) {
