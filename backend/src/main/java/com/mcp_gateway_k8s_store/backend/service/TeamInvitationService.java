@@ -31,6 +31,7 @@ public class TeamInvitationService {
     private final AppUserRepository users;
     private final PasswordEncoder passwords;
     private final Environment environment;
+    private final InvitationEmailService invitationEmail;
     private final SecureRandom random = new SecureRandom();
     private final long expirationHours;
     private final boolean developmentLinksEnabled;
@@ -38,6 +39,7 @@ public class TeamInvitationService {
 
     public TeamInvitationService(TeamInvitationRepository invitations, AppUserRepository users,
                                  PasswordEncoder passwords, Environment environment,
+                                 InvitationEmailService invitationEmail,
                                  @Value("${team.invitations.expiration-hours:72}") long expirationHours,
                                  @Value("${team.invitations.development-links-enabled:false}") boolean developmentLinksEnabled,
                                  @Value("${team.invitations.frontend-base-url:http://localhost:5173}") String frontendBaseUrl) {
@@ -45,6 +47,7 @@ public class TeamInvitationService {
         this.users = users;
         this.passwords = passwords;
         this.environment = environment;
+        this.invitationEmail = invitationEmail;
         this.expirationHours = Math.min(720, Math.max(1, expirationHours));
         this.developmentLinksEnabled = developmentLinksEnabled;
         this.frontendBaseUrl = frontendBaseUrl.replaceAll("/+$", "");
@@ -54,8 +57,9 @@ public class TeamInvitationService {
     public CreatedInvitationResponse create(String adminUsername, String requestedEmail) {
         requireAdmin(adminUsername);
         boolean developmentLink = allowDevelopmentLink();
-        if (!developmentLink) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Email delivery is not configured. Enable development invitation links only in a local dev profile.");
+        boolean emailDelivery = invitationEmail.isConfigured();
+        if (!emailDelivery && !developmentLink) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Invitation email delivery is not configured. Contact an administrator.");
         String email = requestedEmail.trim();
         String emailKey = email.toLowerCase(Locale.ROOT);
         if (users.existsByEmailNormalized(emailKey)) throw new ResponseStatusException(HttpStatus.CONFLICT, "This email already belongs to a registered user");
@@ -74,9 +78,22 @@ public class TeamInvitationService {
         } catch (DataIntegrityViolationException collision) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "An active invitation already exists for this email");
         }
-        String url = frontendBaseUrl + "/accept-invitation?token=" + token;
+        String url = null;
+        String deliveryMode;
+        if (emailDelivery) {
+            try {
+                invitationEmail.send(invitation.getEmail(), token);
+            } catch (IllegalStateException deliveryFailure) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "The invitation could not be emailed. Check the configured mail service and try again.");
+            }
+            deliveryMode = "EMAIL";
+        } else {
+            url = frontendBaseUrl + "/accept-invitation?token=" + token;
+            deliveryMode = "DEVELOPMENT_LINK";
+        }
         return new CreatedInvitationResponse(invitation.getId(), invitation.getEmail(), "PENDING",
-                invitation.getCreatedAt(), invitation.getExpiresAt(), url, "DEVELOPMENT_LINK");
+                invitation.getCreatedAt(), invitation.getExpiresAt(), url, deliveryMode);
     }
 
     @Transactional(readOnly = true)

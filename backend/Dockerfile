@@ -15,6 +15,7 @@ COPY mcp-servers/weather/ ./
 RUN npm run build && npm prune --omit=dev
 
 FROM maven:3.9-eclipse-temurin-21-alpine AS backend-build
+ENV MAVEN_OPTS="-Xms32m -Xmx384m -XX:+UseSerialGC -XX:ActiveProcessorCount=2"
 WORKDIR /workspace/backend
 COPY backend/pom.xml ./
 RUN mvn -B dependency:go-offline

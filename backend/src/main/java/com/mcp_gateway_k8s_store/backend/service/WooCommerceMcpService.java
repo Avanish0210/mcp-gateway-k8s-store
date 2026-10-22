@@ -13,6 +13,7 @@ import java.util.Map;
 
 @Service
 public class WooCommerceMcpService {
+    private static final java.util.Set<String> WOO_TOOLS = java.util.Set.of("list_products", "get_product", "list_orders", "get_order", "list_customers", "get_customer", "create_product", "update_order_status");
 
     private final List<McpSyncClient> mcpClients;
     private final ObjectMapper objectMapper;
@@ -30,10 +31,12 @@ public class WooCommerceMcpService {
     }
 
     public List<String> getAvailableTools() {
+        if (storeClients != null && hasDefaultSession()) return storeClients.tools("store-1");
         return mcpClients.stream()
                 .filter(McpSyncClient::isInitialized)
                 .flatMap(client -> client.listTools().tools().stream())
                 .map(McpSchema.Tool::name)
+                .filter(WOO_TOOLS::contains)
                 .distinct()
                 .sorted()
                 .toList();
@@ -44,11 +47,19 @@ public class WooCommerceMcpService {
     }
 
     public Map<String, Object> getConnectionStatus() {
+        boolean available;
+        try { listProducts(1, 1, ""); available = true; }
+        catch (RuntimeException unavailable) { available = false; }
         return Map.of(
-                "configuredClients", mcpClients.size(),
-                "initializedClients", mcpClients.stream().filter(McpSyncClient::isInitialized).count(),
-                "available", mcpClients.stream().anyMatch(McpSyncClient::isInitialized)
+                "configuredClients", 1,
+                "initializedClients", available ? 1 : 0,
+                "available", available
         );
+    }
+    public Map<String, Object> getConnectionStatus(String storeId) {
+        if (storeId == null || storeId.isBlank() || "store-1".equals(storeId)) return getConnectionStatus();
+        boolean available = storeClients != null && storeClients.healthy(storeId);
+        return Map.of("configuredClients", 1, "initializedClients", available ? 1 : 0, "available", available);
     }
 
     public Object listProducts(int page, int perPage, String search) {
@@ -108,7 +119,8 @@ public class WooCommerceMcpService {
             if (storeClients == null) throw new McpToolException("Store-specific WooCommerce MCP is unavailable.");
             try { client = storeClients.require(storeId); }
             catch (IllegalStateException e) { throw new McpToolException(e.getMessage(), e); }
-        } else client = mcpClients.stream()
+        } else if (storeClients != null && hasDefaultSession()) client = storeClients.require("store-1");
+        else client = mcpClients.stream()
                 .filter(McpSyncClient::isInitialized)
                 .filter(candidate -> candidate.listTools().tools().stream()
                         .anyMatch(tool -> toolName.equals(tool.name())))
@@ -143,5 +155,10 @@ public class WooCommerceMcpService {
         } catch (RuntimeException exception) {
             throw new McpToolException("WooCommerce MCP request failed.", exception);
         }
+    }
+
+    private boolean hasDefaultSession() {
+        try { storeClients.require("store-1"); return true; }
+        catch (IllegalStateException absent) { return false; }
     }
 }

@@ -19,7 +19,7 @@ public class AiGatewayTools {
     }
 
     @Tool(description = "Check actual connection status of WooCommerce, GitHub, and Weather. Use only when asked about connection or integration status.")
-    public Object checkGatewayStatus() { return safe("gateway_status", gateway::gatewayStatus); }
+    public Object checkGatewayStatus() { return safe("gateway_status", () -> gateway.chatGatewayStatus(storeId)); }
 
     @Tool(description = "List or search actual products in the user's already selected WooCommerce store. Never infer product data.")
     public Object listWooCommerceProducts(

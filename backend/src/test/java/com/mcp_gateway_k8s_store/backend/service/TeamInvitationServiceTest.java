@@ -30,6 +30,7 @@ class TeamInvitationServiceTest {
     private AppUserRepository users;
     private Environment environment;
     private BCryptPasswordEncoder passwordEncoder;
+    private InvitationEmailService invitationEmail;
     private TeamInvitationService service;
     private AppUser admin;
 
@@ -38,8 +39,11 @@ class TeamInvitationServiceTest {
         invitations = mock(TeamInvitationRepository.class);
         users = mock(AppUserRepository.class);
         environment = mock(Environment.class);
+        invitationEmail = new InvitationEmailService(mock(org.springframework.mail.javamail.JavaMailSender.class),
+                false, "", "", "", "", true, "http://localhost:5173");
         passwordEncoder = new BCryptPasswordEncoder(4);
-        service = new TeamInvitationService(invitations, users, passwordEncoder, environment, 72, true, "http://localhost:5173");
+        service = new TeamInvitationService(invitations, users, passwordEncoder, environment, invitationEmail,
+                72, true, "http://localhost:5173");
         admin = new AppUser("admin", "admin-password-hash", UserRole.ADMIN);
         when(users.findByUsernameIgnoreCase("admin")).thenReturn(Optional.of(admin));
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);
@@ -72,10 +76,26 @@ class TeamInvitationServiceTest {
     void developmentLinksAreNeverReturnedOutsideAnExplicitLocalProfile() {
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
         TeamInvitationService productionSafeService = new TeamInvitationService(invitations, users, passwordEncoder,
-                environment, 72, true, "https://dashboard.example.com");
+                environment, invitationEmail, 72, true, "https://dashboard.example.com");
         assertEquals(503, assertThrows(ResponseStatusException.class,
                 () -> productionSafeService.create("admin", "member@example.com")).getStatusCode().value());
         verify(invitations, never()).saveAndFlush(any(TeamInvitation.class));
+    }
+
+    @Test
+    void configuredMailDeliverySendsInvitationAndDoesNotReturnTokenLink() {
+        org.springframework.mail.javamail.JavaMailSender sender = mock(org.springframework.mail.javamail.JavaMailSender.class);
+        InvitationEmailService configuredMailer = new InvitationEmailService(sender, true, "smtp.example.com",
+                "invites@example.com", "invites@example.com", "provider-app-password", true,
+                "https://dashboard.example.com");
+        TeamInvitationService mailService = new TeamInvitationService(invitations, users, passwordEncoder,
+                environment, configuredMailer, 72, false, "https://dashboard.example.com");
+
+        CreatedInvitationResponse response = mailService.create("admin", "member@example.com");
+
+        assertEquals("EMAIL", response.deliveryMode());
+        assertNull(response.inviteUrl());
+        verify(sender).send(any(org.springframework.mail.SimpleMailMessage.class));
     }
 
     @Test

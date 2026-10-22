@@ -58,7 +58,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         "spring.ai.mcp.client.enabled=false",
         "stores.provisioning.enabled=true",
         "spring.profiles.active=dev",
-        "team.invitations.development-links-enabled=true"
+        "team.invitations.development-links-enabled=true",
+        "team.invitations.email-enabled=false"
 })
 @AutoConfigureMockMvc
 class BackendApplicationTests {

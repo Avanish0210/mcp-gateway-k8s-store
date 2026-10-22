@@ -2,6 +2,8 @@ param(
     [string]$Context = 'minikube',
     [switch]$ForceRecreate,
     [switch]$NoDeps,
+    [switch]$Build,
+    [switch]$SkipBuild,
     [string[]]$Services
 )
 
@@ -37,12 +39,17 @@ try {
         'KUBERNETES_CONTEXT', 'STORES_WOOCOMMERCE_PLUGIN_VERSION', 'JWT_SECRET', 'JWT_EXPIRATION_SECONDS',
         'SPRING_PROFILES_ACTIVE', 'TEAM_INVITATION_EXPIRATION_HOURS', 'TEAM_INVITATION_DEV_LINKS_ENABLED',
         'INVITATION_FRONTEND_BASE_URL', 'INITIAL_ADMIN_USERNAME', 'INITIAL_ADMIN_PASSWORD',
-        'INITIAL_MEMBER_USERNAME', 'INITIAL_MEMBER_PASSWORD'
+        'INITIAL_MEMBER_USERNAME', 'INITIAL_MEMBER_PASSWORD',
+        'GEMINI_CHAT_MODEL', 'GEMINI_FALLBACK_MODEL',
+        'TEAM_INVITATION_EMAIL_ENABLED', 'TEAM_INVITATION_FROM', 'SPRING_MAIL_HOST',
+        'SPRING_MAIL_PORT', 'SPRING_MAIL_USERNAME', 'SPRING_MAIL_PASSWORD',
+        'SPRING_MAIL_SMTP_AUTH', 'SPRING_MAIL_SMTP_STARTTLS'
     )
+    $hasRootEnv = Test-Path '.env' -PathType Leaf
     $existingBackend = & docker ps -aq --filter 'label=com.docker.compose.project=backend' --filter 'label=com.docker.compose.service=backend' | Select-Object -First 1
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the current backend container.' }
     if ($existingBackend) { $existingBackend = $existingBackend.Trim() }
-    if ($existingBackend) {
+    if ($existingBackend -and -not $hasRootEnv) {
         $container = (& docker inspect $existingBackend | ConvertFrom-Json)[0]
         foreach ($entry in $container.Config.Env) {
             $parts = $entry -split '=', 2
@@ -51,8 +58,8 @@ try {
             }
         }
     }
-    if (-not [Environment]::GetEnvironmentVariable('GOOGLE_API_KEY', 'Process') -or
-        -not [Environment]::GetEnvironmentVariable('GITHUB_PERSONAL_ACCESS_TOKEN', 'Process')) {
+    if (-not $hasRootEnv -and (-not [Environment]::GetEnvironmentVariable('GOOGLE_API_KEY', 'Process') -or
+        -not [Environment]::GetEnvironmentVariable('GITHUB_PERSONAL_ACCESS_TOKEN', 'Process'))) {
         throw 'GOOGLE_API_KEY and GITHUB_PERSONAL_ACCESS_TOKEN must be set in the root .env file, the current environment, or the existing backend container.'
     }
 
@@ -64,7 +71,10 @@ try {
 
     $ComposeArguments = @()
     if (Test-Path '.env' -PathType Leaf) { $ComposeArguments += @('--env-file', '.env') }
-    $ComposeArguments += @('-f', 'backend/compose.yaml', 'up', '--detach', '--build')
+    $ComposeArguments += @('-f', 'backend/compose.yaml', 'up', '--detach')
+    # Routine restarts should reuse the image instead of rebuilding the whole
+    # stack and pulling fresh base images while the laptop is starting up.
+    if ($Build -and -not $SkipBuild) { $ComposeArguments += '--build' }
     if ($ForceRecreate) { $ComposeArguments += '--force-recreate' }
     if ($NoDeps) { $ComposeArguments += '--no-deps' }
     if ($Services) { $ComposeArguments += $Services }

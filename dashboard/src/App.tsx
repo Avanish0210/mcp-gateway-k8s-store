@@ -46,11 +46,10 @@ function App() {
   const [activeStoreId, setActiveStoreId] = useState('')
   const syncManagedStores = useCallback((stores: ManagedStore[]) => {
     setManagedStores(stores)
-    setActiveStoreId((current) => current && stores.some((store) => store.id === current && store.status === 'READY') ? current : '')
   }, [])
 
   useEffect(() => {
-    if (!connected || !backendStatus?.available) return
+    if (!connected || !backendStatus?.available || (activeStoreId && !managedStores.some((store) => store.id === activeStoreId && store.status === 'READY'))) return
     let active = true
     const timer = window.setTimeout(() => {
       setLoading(true)
@@ -68,7 +67,24 @@ function App() {
       }).finally(() => { if (active) setLoading(false) })
     }, 0)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [connected, backendStatus?.available, credentials, section, page, search, statusFilter, activeStoreId])
+  }, [connected, backendStatus?.available, credentials, section, page, search, statusFilter, activeStoreId, managedStores])
+
+  useEffect(() => {
+    if (!connected) return
+    let active = true
+    const refresh = async () => {
+      try {
+        const status = await commerceApi.status(credentials, activeStoreId || undefined)
+        if (active) setBackendStatus(status)
+      } catch { if (active) setBackendStatus(null) }
+      if (credentials.role === 'ADMIN') {
+        try { const stores = await storesApi.list(credentials); if (active) syncManagedStores(stores) } catch { /* keep the selected store */ }
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { void refresh() }, 15000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [connected, credentials, activeStoreId, syncManagedStores])
 
   async function connect(event: FormEvent) {
     event.preventDefault()
@@ -238,13 +254,14 @@ function App() {
         <button className={dashboard === 'audit' ? 'tab active' : 'tab'} onClick={() => { setDashboard('audit'); setError('') }}>Audit log</button>
       </nav>
 
-      {dashboard === 'overview' ? <DashboardOverview credentials={credentials} onNavigate={(next) => { setDashboard(next); setError('') }} /> : dashboard === 'chat' ? <ChatPanel credentials={credentials} storeId={activeStoreId || undefined} /> : dashboard === 'audit' ? <AuditPanel credentials={credentials} /> : dashboard === 'team' && credentials.role === 'ADMIN' ? <TeamPanel credentials={credentials} /> : dashboard === 'api-keys' ? <ApiKeysPanel credentials={credentials} /> : dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
+      {(dashboard === 'woocommerce' || dashboard === 'chat') && <label className="store-picker">Store<select value={activeStoreId} onChange={(event) => { setActiveStoreId(event.target.value); setItems([]); setBackendStatus(null); setPage(1); setDetail(null) }}><option value="">Store 1 · ecommerce</option>{activeStoreId && !managedStores.some((store) => store.id === activeStoreId) && <option value={activeStoreId} disabled>Deleted store - select another store</option>}{managedStores.filter((store) => store.namespace !== 'ecommerce').map((store) => <option key={store.id} value={store.id} disabled={store.status !== 'READY'}>{store.name} · {store.status}</option>)}</select></label>}
+      {dashboard === 'overview' ? <DashboardOverview credentials={credentials} onNavigate={(next) => { setDashboard(next); setError('') }} /> : dashboard === 'chat' ? <ChatPanel key={activeStoreId} credentials={credentials} storeId={activeStoreId || undefined} /> : dashboard === 'audit' ? <AuditPanel credentials={credentials} /> : dashboard === 'team' && credentials.role === 'ADMIN' ? <TeamPanel credentials={credentials} /> : dashboard === 'api-keys' ? <ApiKeysPanel credentials={credentials} /> : dashboard === 'stores' && credentials.role === 'ADMIN' ? <ManagedStoresPanel credentials={credentials} onStoresChanged={syncManagedStores} /> : dashboard === 'weather' ? <WeatherPanel credentials={credentials} /> : dashboard === 'github' ? <>
         {githubStatus?.githubConnected ? <GitHubPanel credentials={credentials} status={githubStatus} tools={githubTools} refreshing={githubRefreshing} onRefresh={refreshGitHub} /> : <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>GitHub</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>Sign-in succeeded. The GitHub MCP server is currently unavailable.</p><button className="secondary" onClick={() => void refreshGitHub()} disabled={githubRefreshing}>{githubRefreshing ? 'Checking…' : 'Check connection'}</button></section>}
         {error && <div className="error github-global-error" role="alert">{error}</div>}
-      </> : dashboard === 'woocommerce' && !backendStatus?.available ? <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>WooCommerce</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>You are signed in, but the WooCommerce MCP server is unavailable. Check its backend configuration and try again.</p><button className="secondary" onClick={() => void commerceApi.status(credentials).then(setBackendStatus).catch((reason: unknown) => setError(errorMessage(reason)))}>Check connection</button></section> : dashboard === 'woocommerce' ? <>
+      </> : dashboard === 'woocommerce' && !backendStatus?.available ? <section className="list-panel integration-unavailable"><div className="panel-heading"><div><span className="eyebrow">MCP SERVER</span><h2>WooCommerce</h2></div><span className="connection"><span className="status-dot" />Not connected</span></div><p>You are signed in, but the WooCommerce MCP server is unavailable. Check its backend configuration and try again.</p><button className="secondary" onClick={() => void commerceApi.status(credentials, activeStoreId || undefined).then(setBackendStatus).catch((reason: unknown) => setError(errorMessage(reason)))}>Check connection</button></section> : dashboard === 'woocommerce' ? <>
         <nav className="tabs" aria-label="Store resources">
           {(['products', 'orders', 'customers'] as Section[]).map((item) => <button key={item} className={section === item ? 'tab active' : 'tab'} onClick={() => { setSection(item); setPage(1); setDetail(null); setNotice('') }}>{item}</button>)}
-          <label className="store-picker">Store<select value={activeStoreId} onChange={(event) => { setActiveStoreId(event.target.value); setPage(1); setDetail(null) }}><option value="">Store 1 · ecommerce</option>{managedStores.filter((store) => store.namespace !== 'ecommerce' && store.status === 'READY').map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
+
         </nav>
 
         <section className="workspace">

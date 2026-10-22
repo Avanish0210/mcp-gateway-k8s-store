@@ -24,6 +24,8 @@ public class StoreProvisioningService {
 
     private final StoreRepository storeRepository;
     private final StoreProvisioningWorker worker;
+    @org.springframework.beans.factory.annotation.Autowired
+    private WooCommerceMcpClientRegistry clients;
 
     public StoreProvisioningService(StoreRepository storeRepository, StoreProvisioningWorker worker) {
         this.storeRepository = storeRepository;
@@ -38,8 +40,7 @@ public class StoreProvisioningService {
                 .toList();
         if (storeRepository.existsByNamespaceName(EXISTING_NAMESPACE)) return result;
         java.util.ArrayList<StoreResponse> withExisting = new java.util.ArrayList<>();
-        withExisting.add(new StoreResponse("store-1", "Store 1", EXISTING_NAMESPACE, "ecommerce-store", null,
-                StoreStatus.READY, null, null));
+        withExisting.add(existingStore());
         withExisting.addAll(result);
         return List.copyOf(withExisting);
     }
@@ -47,8 +48,17 @@ public class StoreProvisioningService {
     @Transactional(readOnly = true)
     public StoreResponse getStore(String id) {
         if ("store-1".equals(id) && !storeRepository.existsByNamespaceName(EXISTING_NAMESPACE))
-            return new StoreResponse("store-1", "Store 1", EXISTING_NAMESPACE, "ecommerce-store", null, StoreStatus.READY, null, null);
+            return existingStore();
         return StoreResponse.from(findStore(id));
+    }
+
+    private StoreResponse existingStore() {
+        boolean ready = false;
+        if (clients != null) {
+            try { clients.require("store-1"); ready = true; } catch (IllegalStateException unavailable) { }
+        }
+        return new StoreResponse("store-1", "Store 1", EXISTING_NAMESPACE, "ecommerce-store", null,
+                ready ? StoreStatus.READY : StoreStatus.RECOVERING, ready ? null : "Store reconnecting automatically", null);
     }
 
     @Transactional

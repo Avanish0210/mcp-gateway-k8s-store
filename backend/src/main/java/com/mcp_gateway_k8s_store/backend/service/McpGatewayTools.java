@@ -28,9 +28,13 @@ public class McpGatewayTools {
 
     @McpTool(name = "gateway_status", description = "Show availability of the WooCommerce, GitHub, and Weather MCP integrations")
     public Map<String, Object> gatewayStatus() {
+        return chatGatewayStatus(null);
+    }
+
+    public Map<String, Object> chatGatewayStatus(String storeId) {
         return audited("gateway", "gateway_status", () -> {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("woocommerce", woo.getConnectionStatus());
+        result.put("woocommerce", woo.getConnectionStatus(storeId));
         result.put("github", github.getConnectionStatus());
         result.put("weather", weather.getConnectionStatus());
         return result;

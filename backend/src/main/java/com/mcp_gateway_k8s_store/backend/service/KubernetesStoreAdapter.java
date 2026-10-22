@@ -63,6 +63,13 @@ public class KubernetesStoreAdapter {
             String owner = run(List.of(kubectl, "--context", context, "get", "namespace", namespace, "-o", "jsonpath={.metadata.labels.mcp-gateway\\/store-id}"), null, Duration.ofSeconds(20)).trim();
             if (!storeId.equals(owner)) throw new IllegalStateException("Target namespace already exists and is not owned by this store");
         }
+        String generation = run(List.of(kubectl, "--context", context, "get", "namespace", namespace,
+                "-o", "jsonpath={.metadata.annotations.mcp-gateway\\/storage-generation}"), null, Duration.ofSeconds(20)).trim();
+        boolean isolatedStorage = storeId.equals(generation);
+        if (isolatedStorage) {
+            ensureVolume(namespace, "wordpress-" + storeId, storeId);
+            ensureVolume(namespace, "mariadb-" + storeId, storeId);
+        }
         ensureSecret(namespace, "wordpress-credentials", storeId,
                 "apiVersion: v1\nkind: Secret\nmetadata:\n  name: wordpress-credentials\n  labels:\n    app.kubernetes.io/managed-by: mcp-gateway\n    mcp-gateway/store-id: \"" + storeId + "\"\ntype: Opaque\ndata:\n  wordpress-password: " + b64(wordpressPassword) + "\n");
         ensureSecret(namespace, "mariadb-credentials", storeId,
@@ -73,7 +80,9 @@ public class KubernetesStoreAdapter {
             values = Files.createTempFile("managed-store-", ".yaml");
             String labels = "    app.kubernetes.io/managed-by: mcp-gateway\n    mcp-gateway/store-id: \"" + storeId + "\"\n";
             String yaml = "store:\n  id: \"" + storeId + "\"\n  localPort: " + localPort + "\nwordpress:\n  wordpressHost: 127.0.0.1:" + localPort + "\n  wordpressScheme: http\n  commonLabels:\n" + labels + "  podLabels:\n" + labels
-                    + "\n  mariadb:\n    commonLabels:\n" + labels + "    podLabels:\n" + labels + "    auth:\n      existingSecret: mariadb-credentials\n";
+                    + (isolatedStorage ? "\n  persistence:\n    existingClaim: wordpress-" + storeId + "\n" : "")
+                    + "\n  mariadb:\n    commonLabels:\n" + labels + "    podLabels:\n" + labels + "    auth:\n      existingSecret: mariadb-credentials\n"
+                    + (isolatedStorage ? "    primary:\n      persistence:\n        existingClaim: mariadb-" + storeId + "\n" : "");
             Files.writeString(values, yaml, StandardCharsets.UTF_8);
             run(List.of(helm, "upgrade", "--install", release, chart.toString(), "--kube-context", context,
                     "--namespace", namespace, "--create-namespace", "--wait", "--timeout", "12m",
@@ -118,18 +127,23 @@ public class KubernetesStoreAdapter {
         try {
             HttpResponse<Void> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
                     .connectTimeout(Duration.ofSeconds(5)).build()
-                    .send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/"))
+                    .send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/wp-json/"))
                                     .timeout(Duration.ofSeconds(8)).GET().build(), HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() < 200 || response.statusCode() >= 400)
+            if (response.statusCode() < 200 || response.statusCode() >= 400) {
+                stopPortForward(namespace);
                 throw new IllegalStateException("Store endpoint returned HTTP " + response.statusCode());
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); throw new IllegalStateException("Interrupted while checking store endpoint", e);
-        } catch (java.io.IOException e) { throw new IllegalStateException("Could not reach the store endpoint", e); }
+        } catch (java.io.IOException e) { stopPortForward(namespace); throw new IllegalStateException("Could not reach the store endpoint", e); }
     }
     public String hostUrl(int port) { return "http://127.0.0.1:" + port + "/"; }
 
     public StoreApiCredentials ensureWooCommerceCredentials(String namespace, String release, String storeId) {
         verifyContext();
+        // A persisted API-key Secret does not prove the plugin files survived
+        // an interrupted first boot or a node restart. Repair the plugin first.
+        ensureWooCommercePlugin(namespace, release);
         String name = "woocommerce-mcp-credentials";
         String present = run(List.of(kubectl, "--context", context, "-n", namespace, "get", "secret", name, "--ignore-not-found", "-o", "jsonpath={.metadata.name}"), null, Duration.ofSeconds(20)).trim();
         if (!present.isBlank()) {
@@ -137,9 +151,8 @@ public class KubernetesStoreAdapter {
             if (!storeId.equals(owner)) throw new IllegalStateException("WooCommerce credential Secret ownership could not be verified");
             return new StoreApiCredentials(secret(namespace, name, "consumer-key"), secret(namespace, name, "consumer-secret"));
         }
-        ensureWooCommercePlugin(namespace, release);
         String php = "$u=get_user_by('login','admin');if(!$u){fwrite(STDERR,'admin user unavailable');exit(2);}$ck='ck_'.wc_rand_hash();$cs='cs_'.wc_rand_hash();global $wpdb;$inserted=$wpdb->insert($wpdb->prefix.'woocommerce_api_keys',['user_id'=>$u->ID,'description'=>'MCP Gateway " + storeId + "','permissions'=>'read_write','consumer_key'=>wc_api_hash($ck),'consumer_secret'=>$cs,'truncated_key'=>substr($ck,-7)],['%d','%s','%s','%s','%s','%s']);if($inserted!==1){fwrite(STDERR,'WooCommerce API key insert failed: '.$wpdb->last_error);exit(3);}echo wp_json_encode(['consumerKey'=>$ck,'consumerSecret'=>$cs]);";
-        String output = run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "--", "wp", "eval", php, "--allow-root"), null, Duration.ofSeconds(30)).trim();
+        String output = run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "-c", "wordpress", "--", "wp", "eval", php, "--allow-root"), null, Duration.ofSeconds(30)).trim();
         String key = jsonValue(output, "consumerKey"), consumerSecret = jsonValue(output, "consumerSecret");
         String labels = "  labels:\n    app.kubernetes.io/managed-by: mcp-gateway\n    mcp-gateway/store-id: \"" + storeId + "\"\n";
         String manifest = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: " + name + "\n" + labels + "type: Opaque\ndata:\n  consumer-key: " + b64(key) + "\n  consumer-secret: " + b64(consumerSecret) + "\n";
@@ -147,16 +160,30 @@ public class KubernetesStoreAdapter {
         return new StoreApiCredentials(key, consumerSecret);
     }
 
+    public void ensureDefaultWooCommercePlugin() {
+        verifyContext();
+        ensureWooCommercePlugin("ecommerce", "ecommerce-store");
+    }
+
     private void ensureWooCommercePlugin(String namespace, String release) {
-        String pluginList = run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "--", "wp", "plugin", "list", "--format=json", "--allow-root"), null, Duration.ofSeconds(30));
-        boolean installed = java.util.regex.Pattern.compile("\\\"name\\\"\\s*:\\s*\\\"woocommerce\\\"").matcher(pluginList).find();
+        String pluginList = run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "-c", "wordpress", "--", "wp", "plugin", "list", "--format=json", "--allow-root"), null, Duration.ofSeconds(30));
+        boolean installed = false, active = false;
+        var plugins = tools.jackson.databind.json.JsonMapper.builder().build().readTree(pluginList);
+        for (var plugin : plugins) {
+            if ("woocommerce".equals(plugin.path("name").asText())) {
+                installed = true;
+                active = "active".equals(plugin.path("status").asText());
+            }
+        }
         if (!installed) {
-            List<String> install = new java.util.ArrayList<>(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "--", "wp", "plugin", "install", "woocommerce"));
+            // An interrupted extraction may leave a directory that WordPress
+            // cannot recognize as an installed plugin. Replace that directory.
+            List<String> install = new java.util.ArrayList<>(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "-c", "wordpress", "--", "env", "WP_CLI_CACHE_DIR=/tmp/wp-cli-cache", "wp", "plugin", "install", "woocommerce", "--force"));
             if (woocommercePluginVersion != null && !woocommercePluginVersion.isBlank()) install.add("--version=" + woocommercePluginVersion.trim());
             install.addAll(List.of("--activate", "--allow-root"));
             run(install, null, Duration.ofMinutes(3));
-        } else {
-            run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "--", "wp", "plugin", "activate", "woocommerce", "--allow-root"), null, Duration.ofSeconds(30));
+        } else if (!active) {
+            run(List.of(kubectl, "--context", context, "-n", namespace, "exec", "deployment/" + release + "-wordpress", "-c", "wordpress", "--", "wp", "plugin", "activate", "woocommerce", "--allow-root"), null, Duration.ofSeconds(30));
         }
     }
 
@@ -171,15 +198,17 @@ public class KubernetesStoreAdapter {
     }
     public record StoreApiCredentials(String consumerKey, String consumerSecret) { }
 
-    private void ensurePortForward(String namespace, String release, int port) {
+    private synchronized void ensurePortForward(String namespace, String release, int port) {
         Process current = forwards.get(namespace);
         if (current != null && current.isAlive() && isListening(port)) return;
         if (current != null) { current.destroyForcibly(); forwards.remove(namespace, current); }
         if (isListening(port)) throw new IllegalStateException("The reserved local store port is already in use");
         try {
-            Process process = new ProcessBuilder(resolveKubectl(), "--context", context, "-n", namespace,
+            ProcessBuilder builder = new ProcessBuilder(resolveKubectl(), "--context", context, "-n", namespace,
                     "port-forward", "service/" + release + "-wordpress", port + ":80", "--address=" + portForwardAddress)
-                    .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+                    .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            if (kubeconfig != null && !kubeconfig.isBlank()) builder.environment().put("KUBECONFIG", kubeconfig);
+            Process process = builder.start();
             forwards.put(namespace, process);
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
             while (System.nanoTime() < deadline) {
@@ -246,16 +275,24 @@ public class KubernetesStoreAdapter {
     public void closePortForwards() { forwards.keySet().forEach(this::stopPortForward); }
 
     private void ensureSecret(String namespace, String name, String storeId, String manifest) {
-        String existing = run(List.of(kubectl, "--context", context, "-n", namespace, "get", "secret", name, "--ignore-not-found", "-o", "jsonpath={.metadata.name}"), null, Duration.ofSeconds(20)).trim();
+        ensureSecret(namespace, name, storeId, manifest, "secret");
+    }
+    private void ensureSecret(String namespace, String name, String storeId, String manifest, String resource) {
+        String existing = run(List.of(kubectl, "--context", context, "-n", namespace, "get", resource, name, "--ignore-not-found", "-o", "jsonpath={.metadata.name}"), null, Duration.ofSeconds(20)).trim();
         if (existing.isBlank()) {
             run(List.of(kubectl, "--context", context, "-n", namespace, "create", "-f", "-"), manifest, Duration.ofSeconds(30));
             return;
         }
-        String owner = run(List.of(kubectl, "--context", context, "-n", namespace, "get", "secret", name, "-o", "jsonpath={.metadata.labels.mcp-gateway\\/store-id}"), null, Duration.ofSeconds(20)).trim();
-        if (!storeId.equals(owner)) throw new IllegalStateException("Credential Secret exists without this store's ownership label");
+        String owner = run(List.of(kubectl, "--context", context, "-n", namespace, "get", resource, name, "-o", "jsonpath={.metadata.labels.mcp-gateway\\/store-id}"), null, Duration.ofSeconds(20)).trim();
+        if (!storeId.equals(owner)) throw new IllegalStateException("Existing " + resource + " does not belong to this store");
     }
 
-    private String namespaceYaml(String ns, String id) { return "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: " + ns + "\n  labels:\n    app.kubernetes.io/managed-by: mcp-gateway\n    mcp-gateway/store-id: \"" + id + "\"\n"; }
+    private void ensureVolume(String namespace, String name, String id) {
+        ensureSecret(namespace, name, id, "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: " + name
+                + "\n  labels:\n    mcp-gateway/store-id: \"" + id + "\"\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: 2Gi\n", "pvc");
+    }
+
+    private String namespaceYaml(String ns, String id) { return "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: " + ns + "\n  annotations:\n    mcp-gateway/storage-generation: \"" + id + "\"\n  labels:\n    app.kubernetes.io/managed-by: mcp-gateway\n    mcp-gateway/store-id: \"" + id + "\"\n"; }
     private String b64(String v) { return Base64.getEncoder().encodeToString(v.getBytes(StandardCharsets.UTF_8)); }
     private void safe(String namespace, String release) {
         if (!namespace.matches("ecommerce-store-[23]") || !release.matches("ecommerce-store-[23]") || !namespace.equals(release) || namespace.equals("ecommerce") || release.equals("ecommerce-store"))

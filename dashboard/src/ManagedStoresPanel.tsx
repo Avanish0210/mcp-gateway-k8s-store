@@ -19,7 +19,7 @@ export default function ManagedStoresPanel({ credentials, onStoresChanged }: { c
     return () => window.clearTimeout(timer)
   }, [refresh])
   useEffect(() => {
-    if (!stores.some((store) => store.status === 'PROVISIONING' || store.status === 'DELETING')) return
+    if (!stores.some((store) => store.status === 'PROVISIONING' || store.status === 'DELETING' || store.status === 'RECOVERING')) return
     const timer = window.setInterval(() => { void refresh() }, 5000)
     return () => window.clearInterval(timer)
   }, [stores, refresh])

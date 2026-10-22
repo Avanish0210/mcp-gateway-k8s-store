@@ -38,7 +38,9 @@ export default function TeamPanel({ credentials }: { credentials: Credentials })
       setCreated(result)
       setCopied(false)
       setEmail('')
-      setNotice('Development invitation link created. No email was sent.')
+      setNotice(result.deliveryMode === 'EMAIL'
+        ? `Invitation email sent to ${result.email}.`
+        : 'Development invitation link created. No email was sent.')
       await refresh()
     } catch (reason) { setError(errorMessage(reason)) }
     finally { setSaving(false) }
@@ -71,7 +73,7 @@ export default function TeamPanel({ credentials }: { credentials: Credentials })
         <label>Email address<input type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></label>
         <button className="primary" type="submit" disabled={saving || !email.trim()}>{saving ? 'Creating…' : 'Create invitation'}</button>
       </form>
-      <p className="team-email-note">Email delivery is not configured. Invitation links are available only when local development mode is explicitly enabled.</p>
+      <p className="team-email-note">Invitations are sent by email when SMTP delivery is configured. Development links are available only in an explicitly enabled local profile.</p>
     </section>
 
     {created?.inviteUrl && <section className="invite-link-card" aria-live="polite">

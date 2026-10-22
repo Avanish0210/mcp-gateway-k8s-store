@@ -16,4 +16,13 @@ public interface StoreRepository extends JpaRepository<Store, String> {
     List<Store> findByStatusIn(Collection<StoreStatus> statuses);
 
     long countByStatusNot(StoreStatus status);
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("update Store s set s.status = :status, s.errorMessage = :error, s.storeUrl = :url where s.id = :id and s.status in :expected")
+    int updateHealth(@org.springframework.data.repository.query.Param("id") String id,
+                     @org.springframework.data.repository.query.Param("status") StoreStatus status,
+                     @org.springframework.data.repository.query.Param("error") String error,
+                     @org.springframework.data.repository.query.Param("url") String url,
+                     @org.springframework.data.repository.query.Param("expected") Collection<StoreStatus> expected);
 }

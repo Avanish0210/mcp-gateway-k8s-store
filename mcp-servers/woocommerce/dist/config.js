@@ -2,7 +2,8 @@
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
-loadEnv({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
+// stdout belongs exclusively to MCP JSON-RPC; dotenv banners corrupt stdio.
+loadEnv({ path: fileURLToPath(new URL("../.env", import.meta.url)), quiet: true });
 function getRequiredEnv(name) {
     const value = process.env[name];
     if (!value) {

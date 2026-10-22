@@ -41,6 +41,27 @@ wordpress:
       username: storeuser
       existingSecret: mariadb-credentials
     primary:
+      # Process probes must not restart a healthy database because an admin
+      # credential differs from a restored/legacy volume. WooCommerce API
+      # health separately validates real application authentication and reads.
+      customStartupProbe:
+        tcpSocket:
+          port: 3306
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 60
+      customLivenessProbe:
+        tcpSocket:
+          port: 3306
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 6
+      customReadinessProbe:
+        tcpSocket:
+          port: 3306
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
       persistence:
         enabled: true
         size: 2Gi

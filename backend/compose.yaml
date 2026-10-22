@@ -1,10 +1,12 @@
 services:
   backend:
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: backend/Dockerfile
     ports:
       - "8081:8081"
+      - "127.0.0.1:38081:38081"
       - "127.0.0.1:38082:38082"
       - "127.0.0.1:38083:38083"
     volumes:
@@ -17,9 +19,13 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-avanish7080}
       SPRING_AI_MCP_CLIENT_ENABLED: ${SPRING_AI_MCP_CLIENT_ENABLED:-true}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:?Set GOOGLE_API_KEY in the root .env file or your environment}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.8-flash}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-gemini-3.5-flash-lite}
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx512m -XX:+UseSerialGC -XX:ActiveProcessorCount=2"
       GITHUB_MCP_URL: http://github-mcp:8082
       GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PERSONAL_ACCESS_TOKEN:?Set GITHUB_PERSONAL_ACCESS_TOKEN in the root .env file or your environment}
-      WOOCOMMERCE_URL: ${WOOCOMMERCE_URL:-http://host.docker.internal:8080}
+      # Supervised by the backend; independent of Minikube's published ports.
+      WOOCOMMERCE_URL: http://127.0.0.1:38081
       DASHBOARD_ALLOWED_ORIGIN: ${DASHBOARD_ALLOWED_ORIGIN:-http://localhost:5173}
       KUBECONFIG: /home/app/.kube/config
       KUBERNETES_CONTEXT: ${KUBERNETES_CONTEXT:-minikube}
@@ -35,6 +41,14 @@ services:
       TEAM_INVITATION_EXPIRATION_HOURS: ${TEAM_INVITATION_EXPIRATION_HOURS:-72}
       TEAM_INVITATION_DEV_LINKS_ENABLED: ${TEAM_INVITATION_DEV_LINKS_ENABLED:-false}
       INVITATION_FRONTEND_BASE_URL: ${INVITATION_FRONTEND_BASE_URL:-http://localhost:5173}
+      TEAM_INVITATION_EMAIL_ENABLED: ${TEAM_INVITATION_EMAIL_ENABLED:-false}
+      TEAM_INVITATION_FROM: ${TEAM_INVITATION_FROM:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_SMTP_AUTH: ${SPRING_MAIL_SMTP_AUTH:-true}
+      SPRING_MAIL_SMTP_STARTTLS: ${SPRING_MAIL_SMTP_STARTTLS:-true}
       INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-admin}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin7080}
       INITIAL_MEMBER_USERNAME: ${INITIAL_MEMBER_USERNAME:-Member}
@@ -42,8 +56,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - default
-      - minikube-api
+      default: {}
+      minikube-api:
+        # Keep Docker from assigning Minikube's reserved .2 address to the
+        # backend when containers auto-start before the cluster after reboot.
+        ipv4_address: ${MINIKUBE_BACKEND_IP:-192.168.49.254}
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +74,7 @@ services:
       start_period: 30s
 
   github-mcp:
+    restart: unless-stopped
     image: ghcr.io/github/github-mcp-server:latest
     command: ["http"]
     ports:
@@ -65,6 +83,7 @@ services:
       GITHUB_READ_ONLY: "1"
 
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-kube_store}

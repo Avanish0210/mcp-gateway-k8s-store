@@ -29,7 +29,12 @@ public class WooCommerceController {
     }
 
     @GetMapping("/status")
-    public Map<String, Object> getConnectionStatus() {
-        return wooCommerceMcpService.getConnectionStatus();
+    public Map<String, Object> getConnectionStatus(@RequestParam(required = false) String storeId) {
+        if (storeId != null && !storeId.isBlank() && !"store-1".equals(storeId)) {
+            var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getAuthorities().stream().noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())))
+                throw new org.springframework.security.access.AccessDeniedException("Only administrators can access managed stores");
+        }
+        return wooCommerceMcpService.getConnectionStatus(storeId);
     }
 }

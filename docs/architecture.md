@@ -206,16 +206,17 @@ Without `storeId`, the service selects the configured default WooCommerce MCP cl
 
 ### Lifecycle states, retry, and deletion
 
-`StoreStatus` defines `PROVISIONING`, `READY`, `FAILED`, and `DELETING`.
+`StoreStatus` defines `PROVISIONING`, `READY`, `RECOVERING`, `FAILED`, and `DELETING`.
 
 - **PROVISIONING:** asynchronous create or retry work is underway.
 - **READY:** Kubernetes checks and the store-specific MCP/API health check succeeded.
-- **FAILED:** create or post-restart validation failed; the sanitized message is shown. Provisioning retry is permitted.
+- **RECOVERING:** an existing store is reconnecting automatically after a temporary outage.
+- **FAILED:** creation/provisioning failed; the sanitized message is shown. Provisioning retry is permitted.
 - **DELETING:** deletion has been accepted and cleanup is underway. On failure, the row remains `DELETING` with a “Deletion failed and can be retried” message; retry resumes cleanup.
 
 Deleting Store 2 or Store 3 is also asynchronous. The backend refuses Store 1, validates the namespace/release pattern, closes the store MCP client, verifies the namespace ownership label, stops its port-forward, uninstalls the Helm release, waits for namespace deletion, and only then removes the database row. If cleanup fails, the database row is intentionally retained so the operation can be retried. Store deletion is not simply deleting the database record.
 
-On Spring Boot startup, `StoreReconciliationRunner` revisits persisted `PROVISIONING` and `DELETING` stores and resumes their work. It also checks persisted `READY` stores, verifies their Kubernetes endpoint and WooCommerce credentials, and rebuilds their in-memory per-store MCP client. If validation fails, it unregisters the client and marks the store failed. This is necessary because MCP subprocess clients and port-forwards are runtime resources and are not themselves stored in PostgreSQL.
+On Spring Boot startup, `StoreReconciliationRunner` revisits persisted `PROVISIONING` and `DELETING` stores and resumes their work. Previously ready stores enter `RECOVERING` while their runtime connections are rebuilt. A scheduled check continues checking `READY` and `RECOVERING` stores with bounded backoff, supervising port-forwards and repairing WooCommerce plugin availability before validating credentials and MCP/API connectivity. Temporary outages do not become permanent provisioning failures. See [restart recovery](restart-recovery.md) for networking, per-store storage identity, and verification details.
 
 The async worker uses a bounded executor. Store operations run in a background thread so the HTTP request can return promptly. A new store's deployment readiness is established by Helm/pod waits plus the endpoint/MCP checks, not merely by seeing the row in the dashboard.
 

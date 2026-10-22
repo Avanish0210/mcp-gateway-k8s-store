@@ -88,4 +88,16 @@ class WooCommerceMcpServiceTest {
     private McpSchema.Tool tool(String name) {
         return McpSchema.Tool.builder(name, Map.of()).build();
     }
+
+    @Test void weatherSessionDoesNotMakeWooCommerceAvailable() {
+        when(client.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(tool("get_current_weather")), null));
+        assertEquals(false, service.getConnectionStatus().get("available"));
+    }
+
+    @Test void initializedTransportWithBrokenStoreApiIsUnavailable() {
+        when(client.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(tool("list_products")), null));
+        when(client.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                List.of(new McpSchema.TextContent("fetch failed")), true, null, Map.of()));
+        assertEquals(false, service.getConnectionStatus().get("available"));
+    }
 }

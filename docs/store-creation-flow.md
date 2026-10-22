@@ -205,9 +205,10 @@ The `McpSyncClient` registry and Node child processes are in-memory runtime stat
 
 - `PROVISIONING`: resume provisioning.
 - `DELETING`: resume deletion.
-- `READY`: re-check the store endpoint, API credentials, and required MCP connection; rebuild the in-memory client.
+- `READY`: enter `RECOVERING` and rebuild the runtime connection.
+- `RECOVERING`: retry endpoint, plugin, credential, and MCP/API validation through the scheduled recovery loop.
 
-If a formerly ready store cannot pass validation, its client is unregistered and its status becomes `FAILED`. This is why a durable `READY` row does not by itself prove a live MCP process exists after a backend restart; readiness is re-established during reconciliation.
+If a formerly ready store cannot pass validation, its client is unregistered and it remains `RECOVERING`, with automatic retries and bounded backoff. Recovery preserves existing storage and credentials and does not reprovision the store. New store identities use UUID-named PVCs so deleting and recreating the same name/namespace cannot reuse the previous store's disk paths. See [restart recovery](restart-recovery.md).
 
 ## Relevant implementation files
 

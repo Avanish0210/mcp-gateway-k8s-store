@@ -15,7 +15,7 @@ export type CreatedApiKey = { key: ApiKeyMetadata; apiKey: string }
 export type TeamMember = { id: string; username: string; email: string | null; role: UserRole; enabled: boolean; createdAt: string }
 export type TeamInvitation = { id: string; email: string; status: 'PENDING' | 'EXPIRED' | 'REVOKED' | 'ACCEPTED'; createdAt: string; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; inviteUrl: string | null }
 export type CreatedInvitation = { id: string; email: string; status: string; createdAt: string; expiresAt: string; inviteUrl: string | null; deliveryMode: 'DEVELOPMENT_LINK' | 'EMAIL' }
-export type ManagedStore = { id: string; name: string; namespace: string; helmRelease: string; storeUrl: string | null; status: 'PROVISIONING' | 'READY' | 'FAILED' | 'DELETING'; errorMessage: string | null; createdAt: string | null }
+export type ManagedStore = { id: string; name: string; namespace: string; helmRelease: string; storeUrl: string | null; status: 'PROVISIONING' | 'READY' | 'RECOVERING' | 'FAILED' | 'DELETING'; errorMessage: string | null; createdAt: string | null }
 export type Page<T> = { items: T[]; hasMore: boolean }
 export type AuditEvent = { id: string; actorId: string | null; actorUsername: string | null; eventType: string; serverId: string | null; toolName: string | null; storeId: string | null; outcome: 'SUCCESS' | 'FAILURE'; occurredAt: string; durationMs: number | null; errorCategory: string | null; description: string | null; correlationId: string | null }
 export type AuditPage = { content: AuditEvent[]; number: number; totalPages: number; totalElements: number }
@@ -45,8 +45,8 @@ async function list<T>(path: string, credentials: Credentials, page: number, per
 }
 
 export const commerceApi = {
-  status: async (credentials: Credentials) =>
-    (await api.get<BackendStatus>('/api/woocommerce/status', config(credentials))).data,
+  status: async (credentials: Credentials, storeId?: string) =>
+    (await api.get<BackendStatus>('/api/woocommerce/status', config(credentials, storeId))).data,
   tools: async (credentials: Credentials) =>
     (await api.get<string[]>('/api/woocommerce/tools', config(credentials))).data,
   products: (credentials: Credentials, page: number, search: string, storeId?: string) =>
@@ -143,10 +143,13 @@ export function errorMessage(error: unknown) {
     if (error.response?.status === 401) return 'Your login or session is invalid or expired. Sign in again with your application username and password.'
     if (error.response?.status === 403) return 'The backend authenticated this account but denied access to this action.'
     if (error.response?.status === 429) return 'Gemini is temporarily rate-limited or its usage quota has been reached. Wait and retry, or check Gemini API usage and limits.'
-    if (error.response?.status === 503) return 'Gemini is temporarily unavailable. Please wait a moment and try again.'
+    if (error.response?.status === 503) {
+      const detail = error.response?.data?.detail ?? error.response?.data?.message
+      return detail ? String(detail) : 'A required backend service is temporarily unavailable. Please try again shortly.'
+    }
     if (error.response?.status === 502) {
       const detail = error.response?.data?.detail ?? error.response?.data?.message
-      return detail ? `AI assistant request failed: ${String(detail)}` : 'The AI assistant could not complete the request. Check the Gemini and MCP service connections, then try again.'
+      return detail ? String(detail) : 'The AI assistant could not complete the request. Check the Gemini and MCP service connections, then try again.'
     }
     const detail = error.response?.data?.detail
     if (detail) return String(detail)

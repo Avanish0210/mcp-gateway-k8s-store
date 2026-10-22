@@ -10,6 +10,12 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    ProblemDetail handleStatusException(org.springframework.web.server.ResponseStatusException exception) {
+        return ProblemDetail.forStatusAndDetail(exception.getStatusCode(),
+                exception.getReason() == null ? "The request could not be completed." : exception.getReason());
+    }
+
     @ExceptionHandler(McpToolException.class)
     ProblemDetail handleMcpToolException(McpToolException exception) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
